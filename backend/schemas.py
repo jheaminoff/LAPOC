@@ -57,10 +57,11 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    persona: str    # "resident" | "developer" | "contractor"
+    persona: str = "auto"   # "resident" | "developer" | "contractor" | "auto" (detected from conversation)
     messages: list[ChatMessage]
 
 
 class ChatResponse(BaseModel):
     reply: str
     tool_calls_made: list[str] = []
+    detected_persona: Optional[str] = None  # returned when agent resolves persona from "auto"

@@ -37,6 +37,10 @@ class Case(Base):
     hearing_date = Column(Text)                     # ISO date string or null
     next_action = Column(Text)
     portal_url = Column(Text)
+    valuation = Column(Float, nullable=True)        # Project dollar valuation (LADBS fee basis)
+    pc_job_number = Column(Text, nullable=True)     # LADBS plan check job# e.g. B-24-10-00001
+    plan_type = Column(Text, nullable=True)         # ADU: "standard_plan" | "custom"
+    conditions_of_approval = Column(Text, nullable=True)  # JSON array of condition strings
 
     plot = relationship("Plot", back_populates="cases")
 

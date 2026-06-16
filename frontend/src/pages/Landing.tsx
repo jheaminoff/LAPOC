@@ -37,7 +37,7 @@ export default function Landing() {
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <img
-            src="https://www.lacity.gov/sites/default/files/images/2020/city-seal.png"
+            src="https://upload.wikimedia.org/wikipedia/commons/f/f3/Seal_of_Los_Angeles.svg"
             alt="City of Los Angeles seal"
             className={styles.seal}
           />

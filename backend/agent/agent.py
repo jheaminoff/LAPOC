@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from typing import Any
 
 from openai import AsyncAzureOpenAI
@@ -98,28 +99,48 @@ TOOLS = [
 # Persona system prompts
 # --------------------------------------------------------------------------- #
 
+_BASE = (
+    "You are LAPOC, the City of Los Angeles planning and permits assistant. "
+    "You help users understand permit processes, entitlement status, zoning, "
+    "and next steps for any LA property. "
+)
+
 SYSTEM_PROMPTS: dict[str, str] = {
     "resident": (
-        "You are LAPOC, the City of Los Angeles planning assistant. "
-        "You help homeowners and residents understand the permit and planning process. "
+        _BASE +
+        "You are speaking with a homeowner or resident. "
         "Explain everything in plain, friendly language — avoid jargon. "
         "When jargon is unavoidable, define it in parentheses. "
         "Focus on what the resident needs to DO next and approximately how long it will take. "
         "Be empathetic — permitting can be stressful."
     ),
     "developer": (
-        "You are LAPOC, the City of Los Angeles planning assistant. "
-        "You assist real estate developers and project teams. "
-        "Use standard LA planning terminology (LOD, CUB, CEQA, ZIMAS, DSC, GeoTeams, etc.). "
+        _BASE +
+        "You are speaking with a real estate developer or project team. "
+        "Use standard LA planning terminology (LOD, CUB, CEQA, ZIMAS, DSC, GeoTeams, EPS, etc.). "
         "Be direct and technical. Flag entitlement risks, fee exposure, and timeline milestones. "
         "Reference specific LAMC sections, case prefixes, and decision-maker levels when relevant."
     ),
     "contractor": (
-        "You are LAPOC, the City of Los Angeles planning assistant. "
-        "You assist licensed contractors navigating LADBS. "
+        _BASE +
+        "You are speaking with a licensed contractor navigating LADBS. "
         "Use LADBS terminology: plan check (PC), branch office codes, permit number formats, "
         "inspection scheduling, TCO vs. CofO. "
         "Be concise and practical — contractors need quick answers on status, fees, and next inspections."
+    ),
+    "auto": (
+        _BASE +
+        "Detect the user's role from how they write and what they ask about:\n"
+        "- RESIDENT: asks about their own home, ADU, remodel, pool, simple permits, says 'my house' or 'my property'\n"
+        "- DEVELOPER: uses terms like entitlement, zoning, TOC, EIR, project, units, yield, feasibility, LOD\n"
+        "- CONTRACTOR: mentions license numbers (C-10, B license), plan check status, inspections, job sites, pull a permit\n\n"
+        "Adapt your language to match the detected role:\n"
+        "- Resident: plain language, friendly, define jargon, focus on next steps\n"
+        "- Developer: technical LA planning terminology, flag risks and timelines\n"
+        "- Contractor: concise LADBS terminology, status and inspection focus\n\n"
+        "After your first substantive response, include a single line at the very end of your reply in this exact format:\n"
+        "[PERSONA:resident] or [PERSONA:developer] or [PERSONA:contractor]\n"
+        "Only include this tag once (on your first response). Do not include it in follow-up messages."
     ),
 }
 
@@ -140,6 +161,26 @@ def _dispatch_tool(name: str, args: dict[str, Any], db: Session) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Persona tag extraction
+# --------------------------------------------------------------------------- #
+
+_PERSONA_TAG_RE = re.compile(r'\[PERSONA:(resident|developer|contractor)\]', re.IGNORECASE)
+
+
+def _extract_persona_tag(text: str) -> tuple[str, str | None]:
+    """
+    Strip the [PERSONA:xxx] tag from the reply text and return
+    (clean_text, detected_persona_or_None).
+    """
+    match = _PERSONA_TAG_RE.search(text)
+    if match:
+        persona = match.group(1).lower()
+        clean = _PERSONA_TAG_RE.sub('', text).rstrip()
+        return clean, persona
+    return text, None
+
+
+# --------------------------------------------------------------------------- #
 # Agent loop
 # --------------------------------------------------------------------------- #
 
@@ -148,14 +189,14 @@ async def run_agent(
     messages: list[dict],
     db: Session,
     max_iterations: int = 6,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], str | None]:
     """
     Run the OpenAI function-calling loop.
 
     Returns:
-        (final_reply_text, list_of_tool_names_called)
+        (final_reply_text, list_of_tool_names_called, detected_persona_or_None)
     """
-    system_prompt = SYSTEM_PROMPTS.get(persona, SYSTEM_PROMPTS["resident"])
+    system_prompt = SYSTEM_PROMPTS.get(persona, SYSTEM_PROMPTS["auto"])
     conversation = [{"role": "system", "content": system_prompt}] + messages
     tools_called: list[str] = []
 
@@ -171,8 +212,9 @@ async def run_agent(
         conversation.append(message.model_dump(exclude_unset=True))
 
         if not message.tool_calls:
-            # No more tool calls — return the final text reply
-            return message.content or "", tools_called
+            raw_reply = message.content or ""
+            clean_reply, detected = _extract_persona_tag(raw_reply)
+            return clean_reply, tools_called, detected
 
         # Execute each tool call and append results
         for tc in message.tool_calls:
@@ -188,5 +230,4 @@ async def run_agent(
                 "content": result,
             })
 
-    # Safety fallback if we hit max iterations
-    return "I wasn't able to complete your request. Please try rephrasing.", tools_called
+

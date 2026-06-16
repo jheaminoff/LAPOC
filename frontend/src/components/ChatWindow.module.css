@@ -70,8 +70,34 @@
 .line { margin: 0; }
 .line + .line { margin-top: 4px; }
 
+.link {
+  color: #000db5;
+  text-decoration: underline;
+  word-break: break-all;
+}
+.link:hover { color: #1c2253; }
+
+/* User bubble links (white background) */
+.user .link {
+  color: #9eb4ff;
+}
+
+.numbered {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 4px 0 2px;
+}
+
+.numberedIndex {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #1c2253;
+  min-width: 18px;
+}
+
 .bullet {
-  margin: 2px 0 2px 16px;
+  margin: 2px 0 2px 18px;
   list-style-type: disc;
 }
 
@@ -156,4 +182,44 @@
   font-size: 12px;
   color: #999;
   margin-top: -8px;
+}
+
+/* ── Mobile ── */
+@media (max-width: 600px) {
+  .content {
+    max-width: 92%;
+  }
+
+  .text {
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+
+  .bubble {
+    gap: 8px;
+  }
+
+  .avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 10px;
+  }
+
+  .inputRow {
+    padding: 8px 10px;
+  }
+
+  .input {
+    font-size: 14px;
+  }
+
+  .sendBtn {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .hint {
+    font-size: 11px;
+  }
 }

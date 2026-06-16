@@ -13,9 +13,13 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     """Run the agent with the given persona and message history."""
-    reply, tool_calls_made = await run_agent(
+    reply, tool_calls_made, detected_persona = await run_agent(
         persona=request.persona,
         messages=[m.model_dump() for m in request.messages],
         db=db,
     )
-    return ChatResponse(reply=reply, tool_calls_made=tool_calls_made)
+    return ChatResponse(
+        reply=reply,
+        tool_calls_made=tool_calls_made,
+        detected_persona=detected_persona,
+    )

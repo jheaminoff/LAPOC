@@ -1,6 +1,9 @@
-import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, useMemo, type KeyboardEvent } from 'react'
 import type { Message } from '@/pages/Chat'
 import CaseStatusBadge from './CaseStatusBadge'
+import WorkflowTimeline, { parseWorkflowText } from './WorkflowTimeline'
+import ParcelCard, { parseParcelText } from './ParcelCard'
+import CaseDetailCard, { parseCaseDetailText } from './CaseDetailCard'
 import styles from './ChatWindow.module.css'
 
 type Props = {
@@ -9,22 +12,90 @@ type Props = {
   onSend: (text: string) => void
 }
 
-/** Very light Markdown-ish renderer: bold, bullet lists, line breaks */
+const URL_RE = /(https?:\/\/[^\s)>\],"']+)/g
+
+/**
+ * Render inline markdown: **bold** and bare https?:// URLs → clickable links.
+ * Splits on URLs first, then applies bold within non-URL segments.
+ */
+function applyInline(line: string): React.ReactNode[] {
+  const urlParts = line.split(URL_RE)
+  return urlParts.flatMap((part, i) => {
+    if (URL_RE.test(part)) {
+      URL_RE.lastIndex = 0 // reset stateful regex after test
+      return [
+        <a
+          key={`url-${i}`}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.link}
+        >
+          {part}
+        </a>,
+      ]
+    }
+    // Apply bold within plain-text segments
+    return part.split(/(\*\*[^*]+\*\*)/).map((seg, j) =>
+      seg.startsWith('**') && seg.endsWith('**')
+        ? <strong key={`b-${i}-${j}`}>{seg.slice(2, -2)}</strong>
+        : seg,
+    )
+  })
+}
+
+/** Very light Markdown-ish renderer: bold, numbered items, bullet lists, line breaks */
 function renderContent(text: string) {
   return text.split('\n').map((line, i) => {
-    // Bold: **text**
-    const parts = line.split(/(\*\*[^*]+\*\*)/).map((part, j) =>
-      part.startsWith('**') && part.endsWith('**')
-        ? <strong key={j}>{part.slice(2, -2)}</strong>
-        : part
-    )
-    // Bullet lines
-    const isBullet = line.trimStart().startsWith('•') || line.trimStart().startsWith('-')
-    if (isBullet) {
-      return <li key={i} className={styles.bullet}>{parts}</li>
+    const trimmed = line.trimStart()
+    const indent = line.length - trimmed.length
+
+    // Numbered list: "1. text" or "1) text"
+    const numberedMatch = trimmed.match(/^(\d+)[.)]\s+(.*)$/)
+    if (numberedMatch) {
+      return (
+        <p key={i} className={styles.numbered} style={{ paddingLeft: indent ? `${indent * 0.55}em` : undefined }}>
+          <span className={styles.numberedIndex}>{numberedMatch[1]}.</span>
+          {applyInline(numberedMatch[2])}
+        </p>
+      )
     }
-    return <p key={i} className={styles.line}>{parts}</p>
+
+    // Bullet lines: "- text", "• text" — strip the marker before rendering
+    const bulletMatch = trimmed.match(/^[•\-]\s+(.*)$/)
+    if (bulletMatch) {
+      return (
+        <li key={i} className={styles.bullet} style={{ paddingLeft: indent ? `${indent * 0.55}em` : undefined }}>
+          {applyInline(bulletMatch[1])}
+        </li>
+      )
+    }
+
+    // Plain line (may still have bold or links)
+    if (!trimmed) return <br key={i} />
+    return <p key={i} className={styles.line}>{applyInline(line)}</p>
   })
+}
+
+/** Memoised parsers — one hook per card type, only run for assistant messages */
+function useCardData(content: string) {
+  const workflow = useMemo(() => parseWorkflowText(content), [content])
+  const parcel = useMemo(() => parseParcelText(content), [content])
+  const caseDetail = useMemo(() => parseCaseDetailText(content), [content])
+  return { workflow, parcel, caseDetail }
+}
+
+function AssistantContent({ content }: { content: string }) {
+  const { workflow, parcel, caseDetail } = useCardData(content)
+  return (
+    <div className={styles.content}>
+      <div className={styles.text}>{renderContent(content)}</div>
+      {parcel && <ParcelCard data={parcel} />}
+      {caseDetail && <CaseDetailCard data={caseDetail} />}
+      {workflow && <WorkflowTimeline data={workflow} />}
+      <CaseStatusBadge content={content} />
+    </div>
+  )
 }
 
 export default function ChatWindow({ messages, loading, onSend }: Props) {
@@ -68,10 +139,13 @@ export default function ChatWindow({ messages, loading, onSend }: Props) {
             {msg.role === 'assistant' && (
               <span className={styles.avatar}>LA</span>
             )}
-            <div className={styles.content}>
-              <div className={styles.text}>{renderContent(msg.content)}</div>
-              <CaseStatusBadge content={msg.content} />
-            </div>
+            {msg.role === 'assistant' ? (
+              <AssistantContent content={msg.content} />
+            ) : (
+              <div className={styles.content}>
+                <div className={styles.text}>{renderContent(msg.content)}</div>
+              </div>
+            )}
           </div>
         ))}
 
