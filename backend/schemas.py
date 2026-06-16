@@ -1,0 +1,66 @@
+"""Pydantic schemas for request/response validation."""
+
+from typing import Optional
+from pydantic import BaseModel
+
+
+class PlotOut(BaseModel):
+    apn: str
+    address: str
+    neighborhood: Optional[str] = None
+    zoning: Optional[str] = None
+    lot_size_sqft: Optional[int] = None
+    current_use: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class CaseOut(BaseModel):
+    case_id: str
+    apn: str
+    department: str
+    process_type: str
+    applicant_type: Optional[str] = None
+    applicant_name: Optional[str] = None
+    submitted_date: Optional[str] = None
+    current_status: Optional[str] = None
+    assigned_to: Optional[str] = None
+    description: Optional[str] = None
+    fees_paid: Optional[float] = None
+    fees_outstanding: Optional[float] = None
+    hearing_date: Optional[str] = None
+    next_action: Optional[str] = None
+    portal_url: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ParcelResult(BaseModel):
+    plot: PlotOut
+    cases: list[CaseOut]
+
+
+class WorkflowStepOut(BaseModel):
+    step_order: int
+    step_name: str
+    description: Optional[str] = None
+    responsible_party: Optional[str] = None
+    typical_days: Optional[str] = None
+    guidance: Optional[str] = None         # persona-specific note (joined from workflow_personas)
+
+    model_config = {"from_attributes": True}
+
+
+class ChatMessage(BaseModel):
+    role: str       # "user" | "assistant"
+    content: str
+
+
+class ChatRequest(BaseModel):
+    persona: str    # "resident" | "developer" | "contractor"
+    messages: list[ChatMessage]
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    tool_calls_made: list[str] = []
