@@ -1,0 +1,91 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.header {
+  background: #1c2253;
+  padding: 16px 24px;
+  color: #fff;
+}
+
+.headerInner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.seal {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.dept {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.75);
+  margin-bottom: 2px;
+}
+
+.title {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+}
+
+.main {
+  flex: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 56px 24px;
+  width: 100%;
+}
+
+.intro {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.intro h2 {
+  font-size: 32px;
+  color: #1c2253;
+  margin-bottom: 12px;
+}
+
+.intro p {
+  font-size: 18px;
+  color: #555;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 28px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.footer {
+  background: #161f50;
+  color: rgba(255,255,255,0.65);
+  text-align: center;
+  padding: 20px 24px;
+  font-size: 13px;
+}
+
+.footer a {
+  color: rgba(255,255,255,0.85);
+}
