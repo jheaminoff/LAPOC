@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tampere x LA — LAPOC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Open Sans', sans-serif;
+      color: #fff;
+      background: #000;
+    }
+
+    /* ── Video background ── */
+    .splash {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .bgVideo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+    }
+
+    /* ── Dark overlay ── */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        180deg,
+        rgba(28, 34, 83, 0.75) 0%,
+        rgba(22, 31, 80, 0.65) 50%,
+        rgba(0, 0, 0, 0.75) 100%
+      );
+      z-index: 1;
+    }
+
+    .overlay::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    /* ── Content ── */
+    .content {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      max-width: 800px;
+      padding: 32px 24px;
+      animation: fadeIn 1.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Crests ── */
+    .crests {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    .crest {
+      width: 96px;
+      height: auto;
+      opacity: 0.95;
+    }
+
+    .crest svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .crest-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.55);
+      margin-top: 6px;
+    }
+
+    .crest-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .x-divider {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 28px;
+      font-weight: 300;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 0.05em;
+      margin-top: -24px;
+    }
+
+    /* ── Typography ── */
+    .title {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      margin-bottom: 6px;
+    }
+
+    .title .amp {
+      font-weight: 400;
+      opacity: 0.6;
+    }
+
+    .sub {
+      font-size: 15px;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 32px;
+      letter-spacing: 0.02em;
+    }
+
+    .tagline {
+      font-size: 13px;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.5);
+      max-width: 480px;
+      margin: 0 auto 32px;
+      line-height: 1.6;
+    }
+
+    /* ── Enter button ── */
+    .enter-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 32px;
+      background: #fff;
+      color: #1c2253;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      letter-spacing: 0.03em;
+      transition: transform 0.15s, box-shadow 0.2s;
+    }
+
+    .enter-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .enter-btn:active {
+      transform: translateY(0);
+    }
+
+    .enter-btn .arrow {
+      font-size: 18px;
+      line-height: 1;
+      transition: transform 0.2s;
+    }
+
+    .enter-btn:hover .arrow {
+      transform: translateX(3px);
+    }
+
+    /* ── Footer info ── */
+    .footer-info {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.3);
+      letter-spacing: 0.06em;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      .crests { gap: 12px; }
+      .crest { width: 64px; }
+      .x-divider { font-size: 22px; margin-top: -16px; }
+      .title { font-size: 26px; }
+      .sub { font-size: 13px; }
+      .enter-btn { padding: 10px 24px; font-size: 13px; }
+    }
+
+    @media (max-width: 380px) {
+      .crest { width: 52px; }
+      .title { font-size: 22px; }
+      .content { padding: 24px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="splash">
+
+  <!-- Video background -->
+  <video class="bgVideo" autoplay loop muted playsInline
+    src="/static/lacity-banner.mp4"
+    poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1920' height='1080'%3E%3Crect fill='%231c2253'/%3E%3C/svg%3E">
+  </video>
+
+  <!-- Overlay -->
+  <div class="overlay"></div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="crests">
+      <!-- LA City Seal -->
+      <div class="crest-group">
+        <div class="crest">
+          <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Outer ring -->
+            <circle cx="60" cy="60" r="56" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5"/>
+            <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="0.8"/>
+
+            <!-- Inner ring -->
+            <circle cx="60" cy="60" r="44" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+
+            <!-- Olive branches (simplified) -->
+            <path d="M16 60 Q20 40 32 30 Q44 20 60 18" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+            <path d="M104 60 Q100 40 88 30 Q76 20 60 18" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+            <path d="M16 60 Q12 50 14 42" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>
+            <path d="M104 60 Q108 50 106 42" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>
+
+            <!-- Leaves on branches -->
+            <ellipse cx="28" cy="38" rx="5" ry="3" fill="rgba(255,255,255,0.4)" transform="rotate(-40 28 38)"/>
+            <ellipse cx="38" cy="30" rx="5" ry="3" fill="rgba(255,255,255,0.4)" transform="rotate(-30 38 30)"/>
+            <ellipse cx="50" cy="24" rx="4" ry="2.5" fill="rgba(255,255,255,0.4)" transform="rotate(-20 50 24)"/>
+            <ellipse cx="92" cy="38" rx="5" ry="3" fill="rgba(255,255,255,0.4)" transform="rotate(40 92 38)"/>
+            <ellipse cx="82" cy="30" rx="5" ry="3" fill="rgba(255,255,255,0.4)" transform="rotate(30 82 30)"/>
+            <ellipse cx="70" cy="24" rx="4" ry="2.5" fill="rgba(255,255,255,0.4)" transform="rotate(20 70 24)"/>
+
+            <!-- Text arc: CITY OF LOS ANGELES -->
+            <path id="arcTop" d="M 22 62 A 44 44 0 0 1 98 62" fill="none"/>
+            <text font-family="'Montserrat',sans-serif" font-size="6.5" font-weight="700" fill="rgba(255,255,255,0.9)" letter-spacing="0.15em">
+              <textPath href="#arcTop" startOffset="50%" text-anchor="middle">CITY OF LOS ANGELES</textPath>
+            </text>
+
+            <!-- Text arc: CALIFORNIA -->
+            <path id="arcBot" d="M 24 60 A 42 42 0 0 0 96 60" fill="none"/>
+            <text font-family="'Montserrat',sans-serif" font-size="5.5" font-weight="600" fill="rgba(255,255,255,0.6)" letter-spacing="0.2em">
+              <textPath href="#arcBot" startOffset="50%" text-anchor="middle">CALIFORNIA</textPath>
+            </text>
+
+            <!-- LA text -->
+            <text x="60" y="56" text-anchor="middle" font-family="'Montserrat',sans-serif" font-size="26" font-weight="800" fill="#fff">LA</text>
+            <text x="60" y="70" text-anchor="middle" font-family="'Open Sans',sans-serif" font-size="7" font-weight="500" fill="rgba(255,255,255,0.7)" letter-spacing="0.1em">CITY PLANNING</text>
+
+            <!-- Small stars around -->
+            <circle cx="60" cy="20" r="1.2" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="60" cy="100" r="1.2" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="20" cy="60" r="1.2" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="100" cy="60" r="1.2" fill="rgba(255,255,255,0.6)"/>
+
+            <!-- Decorative dots -->
+            <circle cx="40" cy="18" r="0.8" fill="rgba(255,255,255,0.3)"/>
+            <circle cx="80" cy="18" r="0.8" fill="rgba(255,255,255,0.3)"/>
+            <circle cx="26" cy="42" r="0.8" fill="rgba(255,255,255,0.3)"/>
+            <circle cx="94" cy="42" r="0.8" fill="rgba(255,255,255,0.3)"/>
+          </svg>
+        </div>
+        <span class="crest-label">Los Angeles</span>
+      </div>
+
+      <!-- X divider -->
+      <span class="x-divider">x</span>
+
+      <!-- Tampere Coat of Arms -->
+      <div class="crest-group">
+        <img src="Vaakuna_Tampere.png" alt="Tampere coat of arms" class="crest" style="width:auto;height:96px;max-width:200px;" />
+        <span class="crest-label">Tampere</span>
+      </div>
+    </div>
+
+    <h1 class="title">Tampere <span class="amp">&amp;</span> Los Angeles</h1>
+    <p class="sub">Building better civic technology together</p>
+
+    <p class="tagline">
+      LAPOC is an open-source AI assistant for LA's planning and permitting
+      processes. This collaboration between the City of Tampere and the City of
+      Los Angeles explores how conversational AI can make government services
+      more accessible to everyone.
+    </p>
+
+    <a href="/" class="enter-btn">
+      Enter LAPOC
+      <span class="arrow">&#8594;</span>
+    </a>
+  </div>
+
+  <div class="footer-info">City of Tampere &middot; City of Los Angeles &middot; June 2026</div>
+</div>
+
+<script>
+  // Try to load the video; fall back gracefully if the static path doesn't work
+  (function() {
+    var video = document.querySelector('.bgVideo');
+    // If the video fails to load (e.g., served from filesystem), hide it
+    video.addEventListener('error', function() {
+      this.style.display = 'none';
+    });
+  })();
+</script>
+
+</body>
+</html>

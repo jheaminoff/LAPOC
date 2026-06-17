@@ -101,7 +101,7 @@ function ProceduralMascot(_props: ChatMascotProps) {
 
 export default function ChatMascot(props: ChatMascotProps) {
   const handleClick = () => {
-    new Audio(`${import.meta.env.VITE_API_URL}/static/baah.mp3`).play().catch(() => {})
+    new Audio('/baah.mp3').play().catch(() => {})
   }
 
   return (

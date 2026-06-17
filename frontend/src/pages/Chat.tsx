@@ -503,8 +503,7 @@ export default function Chat() {
                 Call 311 or 213-473-3231<br />
                 TDD Service Call 7-1-1
               </p>
-              <a href="https://forms.gle/aQRM4zimUbdzRFeP7" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Submit Feedback</a>
-              <a href="https://forms.gle/zaBSVa2Q7n6WEn2B8" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Submit Feedback About LACity.gov</a>
+
             </div>
 
             {/* Col 2 — Quick Links */}

@@ -12,7 +12,7 @@ const slides = [
         <div className={styles.splashBg}>
           <video
             className={styles.bgVideo}
-            src="/static/lacity-banner.mp4"
+            src="/lacity-banner.mp4"
             autoPlay
             loop
             muted
@@ -468,7 +468,29 @@ github.com/jheaminoff/LAPOC
 
 export default function SlideDeck() {
   const [current, setCurrent] = useState(0)
+  const [time, setTime] = useState(new Date())
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const touchStartX = useRef(0)
+  const deckRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      deckRef.current?.requestFullscreen().catch(() => {})
+    } else {
+      document.exitFullscreen().catch(() => {})
+    }
+  }
 
   const goTo = useCallback((index: number) => {
     const i = Math.max(0, Math.min(index, TOTAL - 1))
@@ -511,13 +533,22 @@ export default function SlideDeck() {
   return (
     <div
       className={styles.deck}
+      ref={deckRef}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
+      <div className={styles.topBar}>
+        <button className={styles.fullscreenBtn} onClick={toggleFullscreen} aria-label="Toggle fullscreen">
+          {isFullscreen ? '⛶' : '⛶'}
+        </button>
+        <span className={styles.clock}>
+          {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      </div>
       {slides.map((slide, i) => (
         <div
           key={slide.id}
-          className={`${styles.slide} ${i === 0 ? styles.slideSplash : ''} ${slide.id === 'thankyou' ? styles.slideDark : ''} ${i === current ? styles.active : ''}`}
+          className={`${styles.slide} ${i === 0 ? styles.slideSplash : ''} ${slide.id === 'thankyou' ? styles.slideDark : ''} ${slide.id === 'architecture' ? styles.slideArch : ''} ${i === current ? styles.active : ''}`}
         >
           {slide.content}
 
