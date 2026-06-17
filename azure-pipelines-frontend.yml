@@ -21,7 +21,6 @@ steps:
   - task: AzureStaticWebApp@0
     inputs:
       azure_static_web_apps_api_token: '$(swa_deployment_token)'
-      app_location: 'frontend'
-      output_location: 'dist'
+      app_location: 'frontend/dist'
       skip_app_build: true
       skip_api_build: true
