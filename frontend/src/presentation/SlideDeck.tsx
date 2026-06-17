@@ -446,14 +446,14 @@ const slides = [
 
         <p className={styles.thankYouBody}>
           Watch the recording or try LAPOC yourself at<br/>
-          <a href="https://tre-app-lapoc.azurewebsites.net" className={styles.link}>
+          <a href="https://mango-pond-098047a03.7.azurestaticapps.net" className={styles.link}>
 mango-pond-098047a03.7.azurestaticapps.net
           </a>
         </p>
 
         <p className={styles.thankYouSub}>
-          The code is open-source.<br/>
-          <a href="https://github.com/anomalyco/LAPOC" className={styles.link}>
+          The code is available on GitHub.<br/>
+          <a href="https://github.com/jheaminoff/LAPOC" className={styles.link}>
 github.com/jheaminoff/LAPOC
           </a>
         </p>
