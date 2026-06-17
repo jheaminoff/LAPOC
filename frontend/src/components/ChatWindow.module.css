@@ -185,6 +185,14 @@
   height: 100%;
 }
 
+/* State: speech unavailable (no token) */
+.micOffLarge {
+  background: #e8e8e8;
+  color: #aaa;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 /* State: idle */
 .micIdleLarge {
   background: #1c2253;
@@ -281,6 +289,10 @@
   letter-spacing: 0.02em;
   min-height: 18px;
   transition: opacity 0.2s ease-out;
+}
+
+.micLabelOff {
+  color: #bbb;
 }
 
 .micLabelListening {

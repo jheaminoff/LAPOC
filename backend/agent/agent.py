@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from agent.tools import get_case_detail, get_workflow, lookup_parcel
+from jinja2 import Environment, FileSystemLoader
 from openai import AsyncAzureOpenAI
 from sqlalchemy.orm import Session
 
@@ -99,48 +100,24 @@ TOOLS = [
 
 
 # --------------------------------------------------------------------------- #
-# Persona system prompts
+# Persona system prompts — loaded from Jinja2 template
 # --------------------------------------------------------------------------- #
 
-_BASE = (
-    "You are LAPOC, the City of Los Angeles planning and permits assistant. "
-    "You help users understand permit processes, entitlement status, zoning, "
-    "and next steps for any LA property. "
-)
+_tpl_dir = os.path.join(os.path.dirname(__file__), "prompts")
+_env = Environment(loader=FileSystemLoader(_tpl_dir))
+_template = _env.get_template("system_prompts.jinja")
+
+
+def _render_block(name: str, **kwargs: Any) -> str:
+    context = _template.new_context(kwargs)
+    return "".join(_template.blocks[name](context))
+
 
 SYSTEM_PROMPTS: dict[str, str] = {
-    "resident": (
-        _BASE + "You are speaking with a homeowner or resident. "
-        "Explain everything in plain, friendly language — avoid jargon. "
-        "When jargon is unavoidable, define it in parentheses. "
-        "Focus on what the resident needs to DO next and approximately how long it will take. "
-        "Be empathetic — permitting can be stressful."
-    ),
-    "developer": (
-        _BASE + "You are speaking with a real estate developer or project team. "
-        "Use standard LA planning terminology (LOD, CUB, CEQA, ZIMAS, DSC, GeoTeams, EPS, etc.). "
-        "Be direct and technical. Flag entitlement risks, fee exposure, and timeline milestones. "
-        "Reference specific LAMC sections, case prefixes, and decision-maker levels when relevant."
-    ),
-    "contractor": (
-        _BASE + "You are speaking with a licensed contractor navigating LADBS. "
-        "Use LADBS terminology: plan check (PC), branch office codes, permit number formats, "
-        "inspection scheduling, TCO vs. CofO. "
-        "Be concise and practical — contractors need quick answers on status, fees, and next inspections."
-    ),
-    "auto": (
-        _BASE + "Detect the user's role from how they write and what they ask about:\n"
-        "- RESIDENT: asks about their own home, ADU, remodel, pool, simple permits, says 'my house' or 'my property'\n"
-        "- DEVELOPER: uses terms like entitlement, zoning, TOC, EIR, project, units, yield, feasibility, LOD\n"
-        "- CONTRACTOR: mentions license numbers (C-10, B license), plan check status, inspections, job sites, pull a permit\n\n"
-        "Adapt your language to match the detected role:\n"
-        "- Resident: plain language, friendly, define jargon, focus on next steps\n"
-        "- Developer: technical LA planning terminology, flag risks and timelines\n"
-        "- Contractor: concise LADBS terminology, status and inspection focus\n\n"
-        "After your first substantive response, include a single line at the very end of your reply in this exact format:\n"
-        "[PERSONA:resident] or [PERSONA:developer] or [PERSONA:contractor]\n"
-        "Only include this tag once (on your first response). Do not include it in follow-up messages."
-    ),
+    "resident": _render_block("resident"),
+    "developer": _render_block("developer"),
+    "contractor": _render_block("contractor"),
+    "auto": _render_block("auto"),
 }
 
 
@@ -237,14 +214,75 @@ async def run_agent(
 
 
 # --------------------------------------------------------------------------- #
-# Suggestion generation
+# Speech keynotes generation
 # --------------------------------------------------------------------------- #
 
-_SUGGEST_PROMPT = (
-    "You are LAPOC, the City of Los Angeles planning and permits assistant. "
-    "Based on this conversation, suggest {num} short, specific follow-up questions "
-    "the user is most likely to ask next. Each must be a complete question (10\u201315 words)."
-)
+
+async def generate_speech_keynotes(reply: str) -> str:
+    """Return a 1-2 sentence spoken keynotes paragraph for TTS.
+
+    Calls the LLM with a focused prompt to distil the reply into natural,
+    conversational spoken language — no markdown, no lists, no card data.
+    Falls back to a simple regex strip of the first two sentences if the
+    LLM call fails.
+    """
+    if not reply.strip():
+        return ""
+
+    prompt = (
+        "You are a voice assistant. "
+        "Read the following assistant reply and write a single short spoken paragraph "
+        "(1-2 sentences, max 40 words) that captures the key point for text-to-speech. "
+        "Write in natural spoken English — no bullet points, no lists, no markdown, "
+        "no property data, no step numbers. Just the essential takeaway a listener needs.\n\n"
+        f"Reply:\n{reply}\n\n"
+        "Spoken keynote:"
+    )
+
+    try:
+        response = await client.chat.completions.create(
+            model=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=80,
+            temperature=0.3,
+        )
+        keynote = (response.choices[0].message.content or "").strip()
+        if keynote:
+            return keynote
+    except Exception:
+        pass
+
+    # Fallback: strip card blocks and markdown, return first two sentences
+    import re as _re
+
+    _CARD_SENTINELS = ("PARCEL:", "CASE DETAIL:", "WORKFLOW:")
+    lines = reply.splitlines()
+    clean: list[str] = []
+    skip = False
+    for line in lines:
+        s = line.strip()
+        if any(s.startswith(sentinel) for sentinel in _CARD_SENTINELS):
+            skip = True
+            continue
+        if skip:
+            if s == "":
+                skip = False
+            continue
+        clean.append(s)
+    text = " ".join(clean)
+    text = _re.sub(r"#{1,6}\s+", "", text)
+    text = _re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+    text = _re.sub(r"`[^`]+`", "", text)
+    text = _re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = _re.sub(r"^\s*[-*•]\s+", "", text, flags=_re.MULTILINE)
+    text = _re.sub(r"\s{2,}", " ", text).strip()
+    sentences = _re.split(r"(?<=[.!?])\s+", text)
+    return " ".join(sentences[:2]).strip()
+
+
+# --------------------------------------------------------------------------- #
+# Suggestion generation
+# --------------------------------------------------------------------------- #
 
 _JSON_ARRAY_RE = re.compile(r"\[.*?\]", re.DOTALL)
 
@@ -254,18 +292,21 @@ _DEFAULT_SUGGESTIONS: dict[str, list[str]] = {
         "How do I apply for a new building permit?",
         "What zoning rules apply to this property?",
         "Are there any fees I need to pay?",
+        "Can you check a different address or APN for me?",
     ],
     "case": [
         "What happens next in this case?",
         "How long until the case is approved?",
         "Can I appeal this decision?",
         "What documents do I need to provide?",
+        "Are there any fees or conditions on this case?",
     ],
     "workflow": [
         "How long does this process typically take?",
         "What documents do I need to prepare?",
         "How much do the permits cost?",
         "Can I check the status online?",
+        "Are there overlapping approvals I should know about?",
     ],
 }
 
@@ -283,8 +324,9 @@ async def generate_suggestions(
     role_context = (
         f" The user's role is: {persona}." if persona and persona != "auto" else ""
     )
+    suggest_prompt = _render_block("suggest", num=num_suggestions)
     prompt = (
-        f"{_SUGGEST_PROMPT.format(num=num_suggestions)}{role_context}\n\n"
+        f"{suggest_prompt}{role_context}\n\n"
         f"User: {user_query}\n"
         f"Assistant: {reply}\n\n"
         f"Return ONLY a JSON array of strings, no other text."

@@ -1,4 +1,4 @@
-export type ConversationState = 'idle' | 'listening' | 'thinking' | 'speaking'
+export type ConversationState = 'idle' | 'listening' | 'thinking' | 'synthesizing' | 'speaking'
 
 export interface VisemeEvent {
   visemeId: number

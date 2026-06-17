@@ -6,14 +6,17 @@ interface UseSpeechSynthesizerInput {
   region: string
   language?: string
   onViseme?: (id: number, offsetMs: number) => void
+  onSynthesized?: (text: string, chunks: ArrayBuffer[]) => void
 }
 
 const VOICE_MAP: Record<string, string> = {
-  'en-US': 'en-US-JennyNeural',
+  'en-US': 'en-US-Aria:DragonHDLatestNeural',
 }
 
 interface UseSpeechSynthesizerResult {
   speak: (text: string) => void
+  playUrl: (url: string) => void
+  isSynthesizing: boolean
   isSpeaking: boolean
   stop: () => void
   resumeAudio: () => void
@@ -24,11 +27,14 @@ export function useSpeechSynthesizer({
   region,
   language = 'en-US',
   onViseme,
+  onSynthesized,
 }: UseSpeechSynthesizerInput): UseSpeechSynthesizerResult {
+  const [isSynthesizing, setIsSynthesizing] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const synthRef = useRef<SpeechSDK.SpeechSynthesizer | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const blobUrlRef = useRef<string | null>(null)
+  const audioCacheRef = useRef<Map<string, ArrayBuffer[]>>(new Map())
 
   const resumeAudio = useCallback(() => {
     if (!audioRef.current) {
@@ -57,22 +63,51 @@ export function useSpeechSynthesizer({
     synth.visemeReceived = (_s, e) => {
       onViseme?.(e.visemeId, e.audioOffset / 10000)
     }
-    synth.SynthesisCanceled = (_s, e) => console.error('[TTS] canceled:', e.result.errorDetails)
+    synth.SynthesisCanceled = (_s, e) => {
+      console.error('[TTS] canceled:', e.result.errorDetails)
+      setIsSynthesizing(false)
+      setIsSpeaking(false)
+    }
 
     return synth
   }, [token, region, language, onViseme])
 
   const speak = useCallback((text: string) => {
-    const synth = buildSynthesizer()
-    if (!synth) return
-    synthRef.current?.close()
-    synthRef.current = synth
-    setIsSpeaking(true)
-
     if (!audioRef.current) {
       audioRef.current = new Audio()
     }
     const audio = audioRef.current
+
+    // ── Check cache ──
+    const cachedChunks = audioCacheRef.current.get(text)
+    if (cachedChunks) {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current)
+      }
+      const blob = new Blob(cachedChunks, { type: 'audio/mpeg' })
+      const url = URL.createObjectURL(blob)
+      blobUrlRef.current = url
+      audio.src = url
+      audio.onended = () => setIsSpeaking(false)
+      audio.onerror = () => {
+        console.warn('[TTS] Cached audio playback error')
+        setIsSpeaking(false)
+      }
+      setIsSpeaking(true)
+      audio.play().catch((err) => {
+        console.warn('[TTS] Cached audio play failed:', err)
+        setIsSpeaking(false)
+      })
+      return
+    }
+
+    // ── Synthesis path ──
+    const synth = buildSynthesizer()
+    if (!synth) return
+    synthRef.current?.close()
+    synthRef.current = synth
+    setIsSynthesizing(true)
+    setIsSpeaking(false)
 
     // Collect MP3 chunks during synthesis
     const chunks: ArrayBuffer[] = []
@@ -83,10 +118,16 @@ export function useSpeechSynthesizer({
     }
 
     synth.synthesisCompleted = () => {
+      setIsSynthesizing(false)
+
       if (chunks.length === 0) {
         setIsSpeaking(false)
         return
       }
+
+      // Cache for future reuse
+      audioCacheRef.current.set(text, chunks)
+      onSynthesized?.(text, chunks)
 
       // Revoke previous blob URL before creating a new one
       if (blobUrlRef.current) {
@@ -103,6 +144,7 @@ export function useSpeechSynthesizer({
         console.warn('[TTS] Audio playback error')
         setIsSpeaking(false)
       }
+      setIsSpeaking(true)
       audio.play().catch((err) => {
         console.warn('[TTS] Audio play failed:', err)
         setIsSpeaking(false)
@@ -127,12 +169,31 @@ export function useSpeechSynthesizer({
       },
       (err) => {
         console.error('[TTS] speakSsmlAsync error:', err)
+        setIsSynthesizing(false)
         setIsSpeaking(false)
         synth.close()
         synthRef.current = null
       },
     )
-  }, [buildSynthesizer, language])
+  }, [buildSynthesizer, language, onSynthesized])
+
+  const playUrl = useCallback((url: string) => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio()
+    }
+    const audio = audioRef.current
+    audio.src = url
+    audio.onended = () => setIsSpeaking(false)
+    audio.onerror = () => {
+      console.warn('[TTS] URL playback error')
+      setIsSpeaking(false)
+    }
+    setIsSpeaking(true)
+    audio.play().catch((err) => {
+      console.warn('[TTS] URL play failed:', err)
+      setIsSpeaking(false)
+    })
+  }, [])
 
   const stop = useCallback(() => {
     const synth = synthRef.current
@@ -170,6 +231,7 @@ export function useSpeechSynthesizer({
       URL.revokeObjectURL(blobUrlRef.current)
       blobUrlRef.current = null
     }
+    setIsSynthesizing(false)
     setIsSpeaking(false)
   }, [])
 
@@ -185,5 +247,5 @@ export function useSpeechSynthesizer({
     }
   }, [])
 
-  return { speak, isSpeaking, stop, resumeAudio }
+  return { speak, playUrl, isSynthesizing, isSpeaking, stop, resumeAudio }
 }

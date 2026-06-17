@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useReducer } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ChatWindow from '@/components/ChatWindow'
 import ChatMascot from '@/components/ChatMascot'
@@ -6,6 +6,7 @@ import { useSpeechToken } from '@/hooks/useSpeechToken'
 import { useSpeechRecognizer } from '@/hooks/useSpeechRecognizer'
 import { useSpeechSynthesizer } from '@/hooks/useSpeechSynthesizer'
 import { useVisemeScheduler } from '@/hooks/useVisemeScheduler'
+import { getCachedAudio, setCachedAudio } from '@/utils/audioCache'
 import type { ConversationState } from '@/types/speech'
 import styles from './Chat.module.css'
 
@@ -16,6 +17,9 @@ export type Message = {
 
 const GREETING =
   "Hi — I'm Rami, your LA City planning and permits assistant. Ask me about a permit, an address, a case number, or how a process works. I'll adapt to whether you're a homeowner, developer, or contractor."
+
+const GREETING_SPOKEN =
+  "Hi — I'm Rami, your LA City planning and permits assistant. What can I help you with?"
 
 const PERSONA_LABELS: Record<string, string> = {
   resident: 'Homeowner / Resident',
@@ -46,6 +50,14 @@ const SUGGESTIONS: Suggestion[] = [
   { label: 'Developer: CEQA thresholds', prompt: 'When does my project trigger a full EIR versus a Mitigated Negative Declaration?' },
   { label: 'Contractor: HVAC permit', prompt: 'What do I need to pull an HVAC permit for a residential replacement system?' },
   { label: 'Tenant improvement permit', prompt: 'How do I get a permit for a commercial tenant improvement build-out?' },
+  { label: 'Demolition permit', prompt: 'What do I need to pull a demolition permit for an existing house in LA?' },
+  { label: 'Electrical permit steps', prompt: 'Walk me through the process of getting an electrical permit for a panel upgrade.' },
+  { label: 'Plumbing permit', prompt: 'When do I need a plumbing permit for a residential re-pipe?' },
+  { label: 'Fire sprinkler permit', prompt: 'What are the requirements for a fire sprinkler permit in a commercial retrofit?' },
+  { label: 'Certificate of Occupancy', prompt: 'How do I get a Certificate of Occupancy for a newly built home in LA?' },
+  { label: 'Variance process', prompt: 'My property doesn\'t meet the setback rules — how do I apply for a variance?' },
+  { label: 'Sign permit', prompt: 'What permits do I need to install a business sign on my storefront?' },
+  { label: 'Short-term rental permit', prompt: 'Do I need a permit to operate a short-term rental like an Airbnb in LA?' },
 ]
 
 interface ChatResponse {
@@ -63,6 +75,7 @@ type ConversationAction =
   | { type: 'listening_started' }
   | { type: 'listening_stopped' }
   | { type: 'thinking' }
+  | { type: 'synthesizing' }
   | { type: 'speaking' }
   | { type: 'idle' }
 
@@ -74,6 +87,8 @@ function conversationReducer(state: ConversationState, action: ConversationActio
       return state !== 'idle' && state !== 'thinking' ? 'idle' : state
     case 'thinking':
       return 'thinking'
+    case 'synthesizing':
+      return 'synthesizing'
     case 'speaking':
       return 'speaking'
     case 'idle':
@@ -95,10 +110,19 @@ export default function Chat() {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [conversationState, dispatchCS] = useReducer(conversationReducer, 'idle')
 
-  const visibleSuggestions = useMemo(() => {
+  const pickSuggestions = useCallback(() => {
     const shuffled = [...SUGGESTIONS].sort(() => Math.random() - 0.5)
     return shuffled.slice(0, 5)
   }, [])
+
+  const [visibleSuggestions, setVisibleSuggestions] = useState<Suggestion[]>(() => pickSuggestions())
+  const [spinning, setSpinning] = useState(false)
+
+  const refreshSuggestions = useCallback(() => {
+    setSpinning(true)
+    setVisibleSuggestions(pickSuggestions())
+    setTimeout(() => setSpinning(false), 400)
+  }, [pickSuggestions])
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -108,11 +132,16 @@ export default function Chat() {
   // ── Speech hooks ──────────────────────────────────────────────────────────────
   const { token, region } = useSpeechToken()
   const { scheduleViseme, currentVisemeId, clearQueue, startPlayback } = useVisemeScheduler()
-  const { speak, isSpeaking, stop: stopSpeaking, resumeAudio } = useSpeechSynthesizer({
+  const { speak, playUrl, isSynthesizing, isSpeaking, stop: stopSpeaking, resumeAudio } = useSpeechSynthesizer({
     token,
     region,
     language: 'en-US',
     onViseme: (id, offsetMs) => scheduleViseme(id, offsetMs),
+    onSynthesized: (text, chunks) => {
+      if (text === GREETING_SPOKEN) {
+        void setCachedAudio('greeting', chunks)
+      }
+    },
   })
   const {
     isListening,
@@ -142,6 +171,43 @@ export default function Chat() {
     prevListeningRef.current = isListening
   }, [isListening])
 
+  const prevSynthesizingRef = useRef(isSynthesizing)
+  const prevSpeakingRef = useRef(isSpeaking)
+  useEffect(() => {
+    if (isSynthesizing && !prevSynthesizingRef.current) {
+      dispatchCS({ type: 'synthesizing' })
+    } else if (isSpeaking && !prevSpeakingRef.current) {
+      dispatchCS({ type: 'speaking' })
+    } else if (!isSynthesizing && !isSpeaking && (prevSynthesizingRef.current || prevSpeakingRef.current)) {
+      dispatchCS({ type: 'idle' })
+    }
+    prevSynthesizingRef.current = isSynthesizing
+    prevSpeakingRef.current = isSpeaking
+  }, [isSynthesizing, isSpeaking])
+
+  // ── Speak greeting on page load ──────────────────────────────────────────────
+  const greetingSpokenRef = useRef(false)
+  useEffect(() => {
+    if (isSpeechReady && !greetingSpokenRef.current) {
+      greetingSpokenRef.current = true
+
+      getCachedAudio('greeting').then((cached) => {
+        if (cached) {
+          const blob = new Blob(cached, { type: 'audio/mpeg' })
+          const url = URL.createObjectURL(blob)
+          startPlayback()
+          playUrl(url)
+        } else {
+          startPlayback()
+          speak(GREETING_SPOKEN)
+        }
+      }).catch(() => {
+        startPlayback()
+        speak(GREETING_SPOKEN)
+      })
+    }
+  }, [isSpeechReady, startPlayback, playUrl, speak])
+
   // ── Shared API call logic ─────────────────────────────────────────────────────
   const sendToApi = useCallback(async (next: Message[]) => {
     const controller = new AbortController()
@@ -170,7 +236,6 @@ export default function Chat() {
       }
       setSuggestions(data.suggestions ?? [])
 
-      dispatchCS({ type: 'speaking' })
       startPlayback()
       speak(speechText)
     } catch (err) {
@@ -190,7 +255,7 @@ export default function Chat() {
   const handleVoiceResult = useCallback(async (text: string) => {
     if (!text.trim()) return
 
-    if (isSpeaking) {
+    if (isSpeaking || isSynthesizing) {
       stopSpeaking()
       clearQueue()
     }
@@ -204,13 +269,13 @@ export default function Chat() {
     setHasUserMessage(true)
     await sendToApi(next)
     processingRef.current = false
-  }, [messages, isSpeaking, stopSpeaking, clearQueue, sendToApi])
+  }, [messages, isSpeaking, isSynthesizing, stopSpeaking, clearQueue, sendToApi])
 
   // ── Text send handler ─────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || loading) return
 
-    if (isSpeaking) {
+    if (isSpeaking || isSynthesizing) {
       stopSpeaking()
       clearQueue()
     }
@@ -222,7 +287,7 @@ export default function Chat() {
     setMessages(next)
     setHasUserMessage(true)
     await sendToApi(next)
-  }, [messages, loading, isSpeaking, stopSpeaking, clearQueue, sendToApi])
+  }, [messages, loading, isSpeaking, isSynthesizing, stopSpeaking, clearQueue, sendToApi])
 
   // ── Suggestion click handler (supports dynamic suggestions) ──────────────────
   const handleSuggestionClick = useCallback(async (s: Suggestion) => {
@@ -297,19 +362,8 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* Main nav with drone video background */}
+        {/* Main nav */}
         <div className={styles.mainNav}>
-          {/* Drone video background */}
-          <div className={styles.videoBg} aria-hidden="true">
-            <iframe
-              src="https://player.vimeo.com/video/927683120?h=64d73e9e02&background=1&autoplay=1&loop=1&muted=1&byline=0&title=0&portrait=0"
-              className={styles.videoIframe}
-              allow="autoplay; fullscreen"
-              title=""
-            />
-            <div className={styles.videoOverlay} />
-          </div>
-
           {/* Nav content */}
           <div className={styles.mainNavInner}>
             {/* Logo */}
@@ -367,6 +421,8 @@ export default function Chat() {
 
       </header>
 
+      <div className={styles.pageBody}>
+
       {/* Error banner */}
       {serverError && (
         <div className={styles.errorBanner} role="alert">
@@ -380,11 +436,22 @@ export default function Chat() {
 
       <main className={styles.main}>
         {/* Mascot + suggestions area */}
-        <div className={styles.topArea}>
+        <div className={`${styles.topArea}${hasUserMessage ? ` ${styles.topAreaCentered}` : ''}`}>
           <ChatMascot visemeId={currentVisemeId} state={conversationState} />
           {!hasUserMessage && (
             <div className={styles.suggestions} aria-label="Suggested prompts">
-              <p className={styles.suggestionsLabel}>Try asking…</p>
+              <div className={styles.suggestionsHeader}>
+                <p className={styles.suggestionsLabel}>Try asking…</p>
+                <button
+                  type="button"
+                  className={styles.refreshBtn}
+                  onClick={refreshSuggestions}
+                  aria-label="Refresh suggestions"
+                  title="Refresh suggestions"
+                >
+                  <i className={`fa-solid fa-rotate-right ${styles.refreshIcon}${spinning ? ` ${styles.spinning}` : ''}`} aria-hidden="true" />
+                </button>
+              </div>
               <div className={styles.chips}>
                 {visibleSuggestions.map((s) => (
                   <button
@@ -410,12 +477,85 @@ export default function Chat() {
           isListening={isListening}
           isMuted={isMuted}
           isConnecting={isConnecting}
-          isSpeaking={isSpeaking}
+          isSpeaking={isSpeaking || isSynthesizing}
           onMuteToggle={handleMuteToggle}
           onStopTTS={handleStopTTS}
         />
         <div ref={bottomRef} />
       </main>
+
+      {/* ── lacity.gov-style footer ── */}
+      <footer className={styles.siteFooter}>
+        <div className={styles.videoBanner} aria-hidden="true">
+          <video
+            src="/static/lacity-banner.mp4"
+            className={styles.bannerVideo}
+            autoPlay
+            loop
+            muted
+            playsInline
+          />
+        </div>
+        <div className={styles.footerInner}>
+          <div className={styles.footerTop}>
+
+            {/* Col 1 — City of LA */}
+            <div className={styles.footerCol}>
+              <h2 className={styles.footerColHeading}>City of Los Angeles</h2>
+              <p className={styles.footerText}>
+                200 N Spring St.<br />
+                Los Angeles, CA 90012<br />
+                Call 311 or 213-473-3231<br />
+                TDD Service Call 7-1-1
+              </p>
+              <a href="https://forms.gle/aQRM4zimUbdzRFeP7" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Submit Feedback</a>
+              <a href="https://forms.gle/zaBSVa2Q7n6WEn2B8" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Submit Feedback About LACity.gov</a>
+            </div>
+
+            {/* Col 2 — Quick Links */}
+            <div className={styles.footerCol}>
+              <h2 className={styles.footerColHeading}>Quick Links</h2>
+              <a href="https://lacity.gov/residents" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Support for Residents</a>
+              <a href="https://lacity.gov/business" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Tools for Business</a>
+              <a href="https://lacity.gov/visitors" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Tips for Visitors</a>
+              <a href="https://lacity.gov/jobs" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Search for Jobs</a>
+              <a href="https://lacity.gov/government" className={styles.footerLink} target="_blank" rel="noopener noreferrer">Meet Your Government</a>
+            </div>
+
+            {/* Col 3 — Connect With Us */}
+            <div className={styles.footerCol}>
+              <h2 className={styles.footerColHeading}>Connect With Us</h2>
+              <a href="https://x.com/lacity" className={styles.footerSocial} target="_blank" rel="noopener noreferrer">
+                <i className="fa-brands fa-x-twitter" aria-hidden="true" /> x.com/LACity
+              </a>
+              <a href="https://facebook.com/LACity" className={styles.footerSocial} target="_blank" rel="noopener noreferrer">
+                <i className="fa-brands fa-facebook-f" aria-hidden="true" /> facebook.com/LACity
+              </a>
+              <a href="https://instagram.com/LACity" className={styles.footerSocial} target="_blank" rel="noopener noreferrer">
+                <i className="fa-brands fa-instagram" aria-hidden="true" /> instagram.com/LACity
+              </a>
+              <a href="https://www.youtube.com/@LACity" className={styles.footerSocial} target="_blank" rel="noopener noreferrer">
+                <i className="fa-brands fa-youtube" aria-hidden="true" /> youtube.com/@LACity
+              </a>
+            </div>
+
+          </div>
+
+          {/* Bottom bar */}
+          <div className={styles.footerBottom}>
+            <p className={styles.footerCopy}>© Copyright 2026 City of Los Angeles. All rights reserved.</p>
+            <nav className={styles.footerLegal} aria-label="Footer legal links">
+              <a href="https://disclaimer.lacity.gov/disclaimer.htm" className={styles.footerLegalLink} target="_blank" rel="noopener noreferrer">Disclaimer</a>
+              <a href="https://disclaimer.lacity.gov/privacy.htm" className={styles.footerLegalLink} target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+              <a href="https://lacity.gov/public-records-request" className={styles.footerLegalLink} target="_blank" rel="noopener noreferrer">Records Request</a>
+              <a href="https://disclaimer.lacity.gov/accessibility.htm" className={styles.footerLegalLink} target="_blank" rel="noopener noreferrer">Accessibility Statement</a>
+            </nav>
+          </div>
+        </div>
+      </footer>
+
+      </div>{/* /pageBody */}
+
     </div>
   )
 }

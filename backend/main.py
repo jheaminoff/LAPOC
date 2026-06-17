@@ -9,6 +9,7 @@ load_dotenv()
 from database import Base, engine
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from routers import cases, chat, plots, token
 
 # Create tables on startup
@@ -36,6 +37,7 @@ app.include_router(plots.router)
 app.include_router(cases.router)
 app.include_router(chat.router)
 app.include_router(token.router)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/health")

@@ -21,6 +21,7 @@ export default defineConfig({
       '/chat': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
       '/speech-token': 'http://localhost:8000',
+      '/static': 'http://localhost:8000',
     },
   },
 })
