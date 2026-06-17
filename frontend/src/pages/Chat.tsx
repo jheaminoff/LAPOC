@@ -23,10 +23,16 @@ const PERSONA_LABELS: Record<string, string> = {
   contractor: 'Contractor',
 }
 
-const SUGGESTIONS = [
+type Suggestion = {
+  label: string
+  prompt: string
+  dynamic?: boolean
+}
+
+const SUGGESTIONS: Suggestion[] = [
   { label: 'Look up a permit', prompt: 'I want to look up permit status for 2815 Sunset Blvd, Silver Lake.' },
   { label: 'ADU process steps', prompt: 'What are the steps to add an ADU to my property?' },
-  { label: 'Case status', prompt: 'Can you check the status of case ZA-2024-003812-CUB?' },
+  { label: 'Case status', prompt: 'Can you check the status of case ZA-2024-003812-CUB?', dynamic: true },
   { label: 'How long does plan check take?', prompt: 'How long does residential plan check typically take at LADBS?' },
   { label: 'Zone change steps', prompt: 'What is the process for a zone change on a property in LA?' },
   { label: 'Developer: TOC benefits', prompt: 'How does the Transit Oriented Communities program affect my project feasibility?' },
@@ -170,6 +176,24 @@ export default function Chat() {
     await sendToApi(next)
   }, [messages, loading, isSpeaking, stopSpeaking, clearQueue, sendToApi])
 
+  // ── Suggestion click handler (supports dynamic suggestions) ──────────────────
+  const handleSuggestionClick = useCallback(async (s: Suggestion) => {
+    if (s.dynamic) {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/cases/random`)
+        if (res.ok) {
+          const data = await res.json()
+          const prompt = `Can you check the status of case ${data.case_id}?`
+          await sendMessage(prompt)
+          return
+        }
+      } catch {
+        // fall through to static prompt on error
+      }
+    }
+    await sendMessage(s.prompt)
+  }, [sendMessage])
+
   // ── Scroll management ─────────────────────────────────────────────────────────
   useEffect(() => {
     const el = messagesRef.current
@@ -251,7 +275,7 @@ export default function Chat() {
                   <button
                     key={s.label}
                     className={styles.chip}
-                    onClick={() => sendMessage(s.prompt)}
+                    onClick={() => handleSuggestionClick(s)}
                     disabled={loading}
                   >
                     {s.label}

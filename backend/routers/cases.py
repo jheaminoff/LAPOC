@@ -1,5 +1,7 @@
 """Cases router — look up a specific case by ID."""
 
+import random
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -8,6 +10,16 @@ from models import Case
 from schemas import CaseOut
 
 router = APIRouter(prefix="/cases", tags=["cases"])
+
+
+@router.get("/random")
+def random_case(db: Session = Depends(get_db)):
+    """Return a random case ID from the database."""
+    case_ids = db.query(Case.case_id).all()
+    if not case_ids:
+        raise HTTPException(status_code=404, detail="No cases found")
+    case = random.choice(case_ids)
+    return {"case_id": case.case_id}
 
 
 @router.get("/{case_id}", response_model=CaseOut)
