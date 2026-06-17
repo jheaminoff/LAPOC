@@ -7,6 +7,37 @@ import httpx
 from models import Case, Plot, WorkflowPersona, WorkflowStep
 from sqlalchemy.orm import Session
 
+
+def _find_plot(
+    apn_or_address: str, db: Session
+) -> tuple[Plot | None, str | None]:
+    """
+    Look up a parcel by exact APN or partial address.
+    Returns (plot, None) on single unambiguous match.
+    Returns (None, error) on multiple matches.
+    Returns (None, None) if not found in the database.
+    """
+    plot = db.query(Plot).filter(Plot.apn == apn_or_address).first()
+    if plot:
+        return plot, None
+
+    plots = (
+        db.query(Plot)
+        .filter(Plot.address.ilike(f"%{apn_or_address}%"))
+        .limit(5)
+        .all()
+    )
+    if not plots:
+        return None, None
+    if len(plots) > 1:
+        lines = [f"Multiple parcels matched '{apn_or_address}':"]
+        for p in plots:
+            lines.append(f"  \u2022 APN {p.apn} \u2014 {p.address}")
+        lines.append("Please specify the APN to continue.")
+        return None, "\n".join(lines)
+    return plots[0], None
+
+
 # --------------------------------------------------------------------------- #
 # Tool 1: lookup_parcel
 # --------------------------------------------------------------------------- #
@@ -18,24 +49,9 @@ def lookup_parcel(apn_or_address: str, db: Session) -> str:
     Returns a plain-text summary of the plot, ZIMAS overlays, incentives, and
     all associated cases.
     """
-    plot = db.query(Plot).filter(Plot.apn == apn_or_address).first()
-
-    if not plot:
-        plots = (
-            db.query(Plot)
-            .filter(Plot.address.ilike(f"%{apn_or_address}%"))
-            .limit(5)
-            .all()
-        )
-        if not plots:
-            return f"No parcel found matching '{apn_or_address}'."
-        if len(plots) > 1:
-            lines = [f"Multiple parcels matched '{apn_or_address}':"]
-            for p in plots:
-                lines.append(f"  \u2022 APN {p.apn} \u2014 {p.address}")
-            lines.append("Please specify the APN to continue.")
-            return "\n".join(lines)
-        plot = plots[0]
+    plot, err = _find_plot(apn_or_address, db)
+    if plot is None:
+        return err or f"No parcel found matching '{apn_or_address}'."
 
     cases = db.query(Case).filter(Case.apn == plot.apn).all()
 
@@ -416,26 +432,13 @@ def check_adu_eligibility(apn_or_address: str, db: Session) -> str:
     Returns a structured ADU ELIGIBILITY CHECK: block.
     """
     try:
-        plot = db.query(Plot).filter(Plot.apn == apn_or_address).first()
-
-        if not plot:
-            plots = (
-                db.query(Plot)
-                .filter(Plot.address.ilike(f"%{apn_or_address}%"))
-                .limit(5)
-                .all()
-            )
-            if plots:
-                if len(plots) > 1:
-                    lines = [f"Multiple parcels matched '{apn_or_address}':"]
-                    for p in plots:
-                        lines.append(f"  \u2022 APN {p.apn} \u2014 {p.address}")
-                    lines.append("Please specify the APN to continue.")
-                    return "\n".join(lines)
-                plot = plots[0]
-
-        if plot:
+        plot, err = _find_plot(apn_or_address, db)
+        if plot is not None:
             return _format_adu_eligibility(_plot_to_adu_fields(plot))
+        # err is set only for ambiguous matches — return immediately
+        if err is not None:
+            return err
+        # plot is None and err is None — not in DB, fall through to ZIMAS API
     except Exception:
         pass
 
