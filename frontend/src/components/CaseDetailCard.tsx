@@ -21,7 +21,7 @@ import styles from './CaseDetailCard.module.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface CaseDetailData {
+interface CaseDetailData {
   caseId: string
   department: string
   processType: string

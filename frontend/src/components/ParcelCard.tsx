@@ -18,7 +18,7 @@ import styles from './ParcelCard.module.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface CaseRow {
+interface CaseRow {
   department: string
   caseId: string
   processType: string
@@ -26,7 +26,7 @@ export interface CaseRow {
   feesOutstanding: number | null
 }
 
-export interface ParcelData {
+interface ParcelData {
   address: string
   apn: string
   neighborhood: string

@@ -64,7 +64,7 @@ To add a new sentinel card: sentinel in tool output → `parseXxxText()` → Rea
 | `check_adu_eligibility(apn_or_address)` | APN or address | `ADU ELIGIBILITY CHECK:` block (SQLite → ZIMAS API fallback) |
 
 **External APIs**:
-- `lookup_address` calls LA City BOE GeoQuery (`api.lacity.org`) — **hardcoded key** at `tools.py:245`.
+- `lookup_address` calls LA City BOE GeoQuery (`api.lacity.org`) — **hardcoded key** at `tools.py:262`.
 - `check_adu_eligibility` falls back to **ZIMAS API** (zimas.lacity.org) when the parcel isn't in SQLite. Flow: ArcGIS `search_addressparts` query → PIN → `zm4WS/GetProjectData` for zoning, flood, fire, hillside, HPOZ, coastal zone. No API key needed.
 
 **Agent loop**: `run_agent` in `agent.py` — max 6 iterations, `tool_choice: "auto"`. Returns `(reply_text, tool_names_called, detected_persona)`. Add a tool by: implement in `tools.py` → add schema to `TOOLS` list → add dispatch branch in `_dispatch_tool()`.
@@ -98,5 +98,4 @@ Jinja2 blocks in `agent/prompts/system_prompts.jinja` — edit there, not inline
 
 - **30s fetch timeout** — `Chat.tsx` aborts `/chat` after 30 s. Deep agent chains (6 iterations × slow tool) can hit this.
 - **Greeting audio cached in IndexedDB** — key `"greeting"` via `src/utils/audioCache.ts`. Stale audio survives reloads; clear IndexedDB manually when testing.
-- **`Landing.module.css`** has no paired component — stale artifact from removed `Landing.tsx`.
 - **`WorkflowTimeline` collapse** — >7 steps shows first 5 with "Show all N steps" toggle.

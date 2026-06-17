@@ -5,7 +5,7 @@ import styles from './WorkflowTimeline.module.css'
 // Types
 // -------------------------------------------------------------------------- //
 
-export type WorkflowStep = {
+type WorkflowStep = {
   order: number
   name: string
   responsibleParty: string | null
@@ -14,7 +14,7 @@ export type WorkflowStep = {
   guidance: string | null
 }
 
-export type WorkflowData = {
+type WorkflowData = {
   processType: string
   persona: string
   steps: WorkflowStep[]

@@ -32,7 +32,7 @@ L.Marker.prototype.options.icon = defaultIcon
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-export interface MapData {
+interface MapData {
   latitude: number
   longitude: number
 }
