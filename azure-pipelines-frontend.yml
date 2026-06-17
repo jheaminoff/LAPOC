@@ -27,7 +27,7 @@ steps:
 
   - task: AzureStaticWebApp@0
     inputs:
-      azureSubscription: '$(azureSubscription)'
+      azure_static_web_apps_api_token: '$(swa_deployment_token)'
       app_location: 'frontend'
       output_location: 'dist'
       skip_app_build: true
