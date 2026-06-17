@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useReducer } from 'react'
+import { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ChatWindow from '@/components/ChatWindow'
 import ChatMascot from '@/components/ChatMascot'
@@ -38,6 +38,14 @@ const SUGGESTIONS: Suggestion[] = [
   { label: 'Developer: TOC benefits', prompt: 'How does the Transit Oriented Communities program affect my project feasibility?' },
   { label: 'Contractor: pull a permit', prompt: 'I need to pull an electrical permit — what info do I need to bring to the LADBS office?' },
   { label: 'Conditional Use Permit', prompt: 'What\'s required to get a Conditional Use Permit for alcohol sales in LA?' },
+  { label: 'Grading permit steps', prompt: 'What permits do I need before starting grading on a hillside lot in LA?' },
+  { label: 'New construction process', prompt: 'Walk me through the steps to permit a new single-family home in Los Angeles.' },
+  { label: 'Swimming pool permit', prompt: 'What do I need to get a permit for a new swimming pool or spa?' },
+  { label: 'Coastal Development Permit', prompt: 'My property is near the coast — do I need a Coastal Development Permit?' },
+  { label: 'Resident: ADU cost estimate', prompt: 'How much does it typically cost to permit and build an ADU in Los Angeles?' },
+  { label: 'Developer: CEQA thresholds', prompt: 'When does my project trigger a full EIR versus a Mitigated Negative Declaration?' },
+  { label: 'Contractor: HVAC permit', prompt: 'What do I need to pull an HVAC permit for a residential replacement system?' },
+  { label: 'Tenant improvement permit', prompt: 'How do I get a permit for a commercial tenant improvement build-out?' },
 ]
 
 interface ChatResponse {
@@ -86,6 +94,11 @@ export default function Chat() {
   const [hasUserMessage, setHasUserMessage] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [conversationState, dispatchCS] = useReducer(conversationReducer, 'idle')
+
+  const visibleSuggestions = useMemo(() => {
+    const shuffled = [...SUGGESTIONS].sort(() => Math.random() - 0.5)
+    return shuffled.slice(0, 5)
+  }, [])
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -266,25 +279,92 @@ export default function Chat() {
 
   return (
     <div className={styles.page}>
-      {/* Sticky header */}
-      <header className={styles.header}>
-        <div className={styles.headerInner}>
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/f/f3/Seal_of_Los_Angeles.svg"
-            alt="City of Los Angeles seal"
-            className={styles.seal}
-          />
-          <button className={styles.back} onClick={() => navigate('/')} aria-label="Back to home">
-            ←
-          </button>
-          <div className={styles.titleGroup}>
-            <span className={styles.dept}>City of Los Angeles — Planning &amp; Permits</span>
-            <h1 className={styles.title}>Planning Assistant</h1>
+      {/* ── lacity.gov-style header ── */}
+      <header className={styles.siteHeader}>
+
+        {/* Top utility bar */}
+        <div className={styles.utilityBar}>
+          <div className={styles.utilityInner}>
+            <span className={styles.officialText}>The Official Website of the City of Los Angeles</span>
+            <nav className={styles.utilityLinks} aria-label="Utility navigation">
+              <a href="https://lacity.gov/myla311" className={styles.utilityLink} target="_blank" rel="noopener noreferrer">
+                <i className="fa-solid fa-gear" aria-hidden="true" /> City Services
+              </a>
+              <a href="https://lacity.gov/directory" className={styles.utilityLink} target="_blank" rel="noopener noreferrer">
+                <i className="fa-solid fa-address-book" aria-hidden="true" /> City Directory
+              </a>
+            </nav>
           </div>
-          {detectedPersona && (
-            <span className={styles.badge}>{PERSONA_LABELS[detectedPersona] ?? detectedPersona}</span>
-          )}
         </div>
+
+        {/* Main nav with drone video background */}
+        <div className={styles.mainNav}>
+          {/* Drone video background */}
+          <div className={styles.videoBg} aria-hidden="true">
+            <iframe
+              src="https://player.vimeo.com/video/927683120?h=64d73e9e02&background=1&autoplay=1&loop=1&muted=1&byline=0&title=0&portrait=0"
+              className={styles.videoIframe}
+              allow="autoplay; fullscreen"
+              title=""
+            />
+            <div className={styles.videoOverlay} />
+          </div>
+
+          {/* Nav content */}
+          <div className={styles.mainNavInner}>
+            {/* Logo */}
+            <a href="https://lacity.gov" className={styles.logoLink} target="_blank" rel="noopener noreferrer" aria-label="City of Los Angeles">
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/f/f3/Seal_of_Los_Angeles.svg"
+                alt="City of Los Angeles seal"
+                className={styles.navSeal}
+              />
+              <span className={styles.logoText}>
+                <span className={styles.logoCity}>City of</span>
+                <span className={styles.logoLA}>Los Angeles</span>
+              </span>
+            </a>
+
+            {/* Nav links */}
+            <ul className={styles.navLinks} role="list">
+              {['RESIDENTS','BUSINESS','VISITORS','JOBS','GOVERNMENT','TV'].map(label => (
+                <li key={label}>
+                  <a href={`https://lacity.gov/${label.toLowerCase()}`} className={styles.navLink} target="_blank" rel="noopener noreferrer">{label}</a>
+                </li>
+              ))}
+            </ul>
+
+            {/* Icon actions */}
+            <div className={styles.navIcons}>
+              <button className={styles.navIcon} aria-label="Translate" title="Translate">
+                <i className="fa-solid fa-globe" aria-hidden="true" />
+              </button>
+              <button className={styles.navIcon} aria-label="Accessibility tools" title="Accessibility Tools">
+                <i className="fa-solid fa-universal-access" aria-hidden="true" />
+              </button>
+              <a href="https://lacity.gov/search" className={styles.navIcon} aria-label="Search" title="Search" target="_blank" rel="noopener noreferrer">
+                <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* App sub-bar */}
+        <div className={styles.appBar}>
+          <div className={styles.appBarInner}>
+            <button className={styles.back} onClick={() => navigate('/')} aria-label="Back to home">
+              <i className="fa-solid fa-arrow-left" aria-hidden="true" />
+            </button>
+            <div className={styles.titleGroup}>
+              <span className={styles.dept}>City of Los Angeles — Planning &amp; Permits</span>
+              <h1 className={styles.title}>Planning Assistant</h1>
+            </div>
+            {detectedPersona && (
+              <span className={styles.badge}>{PERSONA_LABELS[detectedPersona] ?? detectedPersona}</span>
+            )}
+          </div>
+        </div>
+
       </header>
 
       {/* Error banner */}
@@ -306,7 +386,7 @@ export default function Chat() {
             <div className={styles.suggestions} aria-label="Suggested prompts">
               <p className={styles.suggestionsLabel}>Try asking…</p>
               <div className={styles.chips}>
-                {SUGGESTIONS.map((s) => (
+                {visibleSuggestions.map((s) => (
                   <button
                     key={s.label}
                     className={styles.chip}
