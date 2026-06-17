@@ -130,16 +130,144 @@
 /* Input row */
 .inputRow {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   align-items: flex-end;
   background: #fff;
   border: 2px solid #d9d9d9;
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 10px 8px 10px 12px;
   transition: border-color 0.2s;
 }
 
 .inputRow:focus-within { border-color: #1c2253; }
+
+/* ── Mic button in input row ── */
+.micBtn {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.micBtn:disabled {
+  cursor: not-allowed;
+}
+
+.micIcon {
+  position: relative;
+  z-index: 2;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Idle — gray, transparent, ready to tap */
+.micIdle {
+  background: transparent;
+  color: #999;
+}
+
+.micIdle:hover:not(:disabled) {
+  background: #eee;
+}
+
+/* Listening — red bg + white icon */
+.micListening {
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5);
+}
+
+.micListening:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+/* Muted — amber/transparent, clearly muted */
+.micMuted {
+  background: transparent;
+  color: #d97706;
+  opacity: 0.7;
+}
+
+.micMuted:hover:not(:disabled) {
+  background: #fffbeb;
+  opacity: 1;
+}
+
+/* Connecting — spinner */
+.micConnecting {
+  background: transparent;
+  color: #999;
+}
+
+.micSpinner {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid #d9d9d9;
+  border-top-color: #1c2253;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Pulse ring for listening */
+.micPulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(220, 38, 38, 0.4);
+  animation: pulse 1.5s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Stop TTS button */
+.stopBtn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: none;
+  background: #dc2626;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.stopBtn:hover {
+  background: #b91c1c;
+}
+
+.speechHint {
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  margin: 4px 0 0;
+}
 
 .input {
   flex: 1;

@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import engine, Base
-from routers import plots, cases, chat
+from routers import plots, cases, chat, token
 
 # Create tables on startup
 Base.metadata.create_all(bind=engine)
@@ -22,7 +22,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://mango-pond-098047a03.7.azurestaticapps.net",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +35,7 @@ app.add_middleware(
 app.include_router(plots.router)
 app.include_router(cases.router)
 app.include_router(chat.router)
+app.include_router(token.router)
 
 
 @app.get("/health")

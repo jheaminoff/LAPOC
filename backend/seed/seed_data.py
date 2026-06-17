@@ -902,13 +902,19 @@ WORKFLOW_STEPS = [
     dict(process_type="Bldg-New", step_order=5, step_name="Respond to Corrections",
          description="Address plan check comments and resubmit. Multiple rounds possible.",
          responsible_party="Applicant", typical_days="14-30"),
-    dict(process_type="Bldg-New", step_order=6, step_name="PC Approved — Issue Permit",
+    dict(process_type="Bldg-New", step_order=6, step_name="LADOT Driveway & Access Review",
+         description="If the project requires new driveways on arterial/collector streets, has 25+ parking spaces, "
+                     "or includes drive-through operations — submit driveway plans to LADOT for review. "
+                     "LADOT approves driveway location, width, queuing capacity, turning restrictions, "
+                     "and pedestrian safety. Board of Public Works approval required for deviations from LAMC 62.105.",
+         responsible_party="LADOT", typical_days="14-45"),
+    dict(process_type="Bldg-New", step_order=7, step_name="PC Approved — Issue Permit",
          description="Plans approved. Pay issuance fees. Post permit on site before any work begins.",
          responsible_party="Applicant", typical_days="1-3"),
-    dict(process_type="Bldg-New", step_order=7, step_name="Construction & Inspections",
+    dict(process_type="Bldg-New", step_order=8, step_name="Construction & Inspections",
          description="Construct per plans. LADBS inspector visits for foundation, framing, rough MEP, structural, insulation, drywall, final.",
          responsible_party="Applicant", typical_days="90-365"),
-    dict(process_type="Bldg-New", step_order=8, step_name="Certificate of Occupancy",
+    dict(process_type="Bldg-New", step_order=9, step_name="Certificate of Occupancy",
          description="After final inspection passes, LADBS issues CofO or TCO. Required before occupancy.",
          responsible_party="LADBS", typical_days="5-14"),
 
@@ -1018,13 +1024,19 @@ WORKFLOW_STEPS = [
     dict(process_type="Bldg-Addition", step_order=5, step_name="Respond to Corrections",
          description="Address plan check correction letter items. Revise and resubmit via ePlanLA.",
          responsible_party="Applicant", typical_days="7-21"),
-    dict(process_type="Bldg-Addition", step_order=6, step_name="Pay Issuance Fees & Receive Permit",
+    dict(process_type="Bldg-Addition", step_order=6, step_name="LADOT Driveway & Access Review",
+         description="If the addition adds new driveway access, modifies existing driveways on arterial/collector streets, "
+                     "or increases on-site parking beyond 25 spaces — submit driveway plans to LADOT. "
+                     "LADOT reviews driveway location, width, curb cuts, and pedestrian safety per LAMC 62.105 and their "
+                     "Driveway Design Guidelines (Section 321). Board of Public Works approval needed for any deviations.",
+         responsible_party="LADOT", typical_days="14-45"),
+    dict(process_type="Bldg-Addition", step_order=7, step_name="Pay Issuance Fees & Receive Permit",
          description="Once PC Approved, pay issuance fees. Post permit on site before work begins.",
          responsible_party="Applicant", typical_days="1-2"),
-    dict(process_type="Bldg-Addition", step_order=7, step_name="Construction & Inspections",
+    dict(process_type="Bldg-Addition", step_order=8, step_name="Construction & Inspections",
          description="Build per approved plans. Key inspections: foundation, framing, rough MEP, insulation, drywall, final.",
          responsible_party="Applicant", typical_days="30-180"),
-    dict(process_type="Bldg-Addition", step_order=8, step_name="Final Inspection & Permit Finaled",
+    dict(process_type="Bldg-Addition", step_order=9, step_name="Final Inspection & Permit Finaled",
          description="All inspections complete. LADBS inspector finals the permit.",
          responsible_party="LADBS", typical_days="1-5"),
 
@@ -1398,6 +1410,11 @@ WORKFLOW_PERSONAS = [
     dict(process_type="Bldg-New", step_name="Plan Check Review", persona="developer",
          guidance="First round: 8-12 weeks multi-family, 12-20 weeks high-rise. "
                   "Track correction queue via MyLADBS. Consider plan check expediter for complex projects."),
+    dict(process_type="Bldg-New", step_name="LADOT Driveway & Access Review", persona="developer",
+         guidance="LADOT reviews driveway design for projects on arterial streets or with 25+ parking spaces. "
+                  "Submit site plan with driveway dimensions, queuing analysis, turning templates. "
+                  "Budget 3-6 weeks for LADOT review. Deviations from LAMC 62.105 require Board of Public Works approval. "
+                  "See LADOT Driveway Design Guidelines (Section 321) for width tables per development type."),
     dict(process_type="Bldg-New", step_name="Certificate of Occupancy", persona="developer",
          guidance="File CofO application before final inspection. LADBS issues TCO for minor outstanding items. "
                   "CofO is required for final loan draw in most construction finance agreements."),
@@ -1492,6 +1509,11 @@ WORKFLOW_PERSONAS = [
     dict(process_type="Bldg-Addition", step_name="Submit to LADBS", persona="developer",
          guidance="Multi-family additions go to Multi-Family plan check team at Metro. "
                   "Submit via ePlanLA with full set: architectural, structural, MEP, Title 24."),
+    dict(process_type="Bldg-Addition", step_name="LADOT Driveway & Access Review", persona="developer",
+         guidance="If the addition adds driveway access or parking beyond 25 spaces, LADOT review is required. "
+                  "Submit driveway plan showing curb cut width (per LAMC 62.105.2), spacing from intersections "
+                  "(min 150 ft on arterial), and queuing capacity. Deviations need Board of Public Works approval "
+                  "per LAMC 62.105.5. See LADOT Driveway Design Guidelines (Section 321) for full criteria."),
     dict(process_type="Bldg-Addition", step_name="Confirm Zoning & Setbacks", persona="contractor",
          guidance="Verify the architect's plans reflect actual site conditions before pulling permit. "
                   "Check for any open violations on the parcel via LADBS VCO search first."),

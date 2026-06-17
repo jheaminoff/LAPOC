@@ -4,6 +4,10 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  assetsInclude: ['**/*.glb'],
+  optimizeDeps: {
+    include: ['microsoft-cognitiveservices-speech-sdk'],
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -16,6 +20,7 @@ export default defineConfig({
       '/cases': 'http://localhost:8000',
       '/chat': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
+      '/speech-token': 'http://localhost:8000',
     },
   },
 })

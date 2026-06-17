@@ -103,6 +103,7 @@ def get_workflow(process_type: str, persona: str, db: Session) -> str:
     """
     Return the ordered workflow steps for a process type, with persona-specific
     plain-language guidance injected per step.
+    Persona falls back to 'resident' if no specific guidance rows exist.
     """
     steps = (
         db.query(WorkflowStep)
@@ -118,6 +119,7 @@ def get_workflow(process_type: str, persona: str, db: Session) -> str:
         )
 
     # Build a lookup of persona guidance keyed by step_name
+    # Fall back to 'resident' if no rows exist for the requested persona
     persona_rows = (
         db.query(WorkflowPersona)
         .filter(
@@ -126,6 +128,15 @@ def get_workflow(process_type: str, persona: str, db: Session) -> str:
         )
         .all()
     )
+    if not persona_rows and persona != "resident":
+        persona_rows = (
+            db.query(WorkflowPersona)
+            .filter(
+                WorkflowPersona.process_type == process_type,
+                WorkflowPersona.persona == "resident",
+            )
+            .all()
+        )
     guidance_map = {row.step_name: row.guidance for row in persona_rows}
 
     lines = [f"WORKFLOW: {process_type}  (view: {persona})", ""]

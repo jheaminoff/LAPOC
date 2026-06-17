@@ -10,6 +10,13 @@ type Props = {
   messages: Message[]
   loading: boolean
   onSend: (text: string) => void
+  isSpeechReady?: boolean
+  isListening?: boolean
+  isMuted?: boolean
+  isConnecting?: boolean
+  isSpeaking?: boolean
+  onMuteToggle?: () => void
+  onStopTTS?: () => void
 }
 
 const URL_RE = /(https?:\/\/[^\s)>\],"']+)/g
@@ -44,9 +51,37 @@ function applyInline(line: string): React.ReactNode[] {
   })
 }
 
+/**
+ * Strip structured sentinel blocks from the text before rendering as markdown.
+ * The blocks (PARCEL:, CASE DETAIL:, WORKFLOW:) are rendered as visual cards —
+ * we don't also want them in the plain-text bubble.
+ */
+const SENTINEL_RE = /^(PARCEL:|CASE DETAIL:|WORKFLOW:)/
+
+function stripStructuredBlocks(text: string): string {
+  const lines = text.split('\n')
+  const out: string[] = []
+  let inBlock = false
+
+  for (const line of lines) {
+    if (SENTINEL_RE.test(line.trim())) {
+      inBlock = true
+      continue
+    }
+    // A non-indented, non-empty line after a block starts regular text again
+    if (inBlock && line.trim() && !line.startsWith('  ') && !line.startsWith('\t')) {
+      inBlock = false
+    }
+    if (!inBlock) out.push(line)
+  }
+
+  return out.join('\n').trim()
+}
+
 /** Very light Markdown-ish renderer: bold, numbered items, bullet lists, line breaks */
 function renderContent(text: string) {
-  return text.split('\n').map((line, i) => {
+  const cleaned = stripStructuredBlocks(text)
+  return cleaned.split('\n').map((line, i) => {
     const trimmed = line.trimStart()
     const indent = line.length - trimmed.length
 
@@ -93,12 +128,24 @@ function AssistantContent({ content }: { content: string }) {
       {parcel && <ParcelCard data={parcel} />}
       {caseDetail && <CaseDetailCard data={caseDetail} />}
       {workflow && <WorkflowTimeline data={workflow} />}
-      <CaseStatusBadge content={content} />
+      {/* Suppress inline status badge when CaseDetailCard is already showing status */}
+      {!caseDetail && <CaseStatusBadge content={content} />}
     </div>
   )
 }
 
-export default function ChatWindow({ messages, loading, onSend }: Props) {
+export default function ChatWindow({
+  messages,
+  loading,
+  onSend,
+  isSpeechReady,
+  isListening,
+  isMuted,
+  isConnecting,
+  isSpeaking,
+  onMuteToggle,
+  onStopTTS,
+}: Props) {
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -162,6 +209,33 @@ export default function ChatWindow({ messages, loading, onSend }: Props) {
       </div>
 
       <div className={styles.inputRow}>
+        {isSpeechReady && (
+          <button
+            className={`${styles.micBtn} ${
+              isConnecting ? styles.micConnecting :
+              isListening && !isMuted ? styles.micListening :
+              isMuted ? styles.micMuted :
+              styles.micIdle
+            }`}
+            onClick={onMuteToggle}
+            disabled={isConnecting || loading}
+            title={
+              isConnecting ? 'Connecting…' :
+              isMuted ? 'Microphone muted — tap to unmute' :
+              isListening ? 'Listening — tap to mute' :
+              'Click to start microphone'
+            }
+          >
+            {isConnecting ? (
+              <span className={styles.micSpinner} />
+            ) : isMuted ? (
+              <span className={styles.micIcon}>🔇</span>
+            ) : (
+              <span className={styles.micIcon}>🎤</span>
+            )}
+            {isListening && !isMuted && <span className={styles.micPulse} />}
+          </button>
+        )}
         <textarea
           ref={textareaRef}
           className={styles.input}
@@ -172,6 +246,15 @@ export default function ChatWindow({ messages, loading, onSend }: Props) {
           rows={1}
           disabled={loading}
         />
+        {isSpeaking && (
+          <button
+            className={styles.stopBtn}
+            onClick={onStopTTS}
+            aria-label="Stop speaking"
+          >
+            ■
+          </button>
+        )}
         <button
           className={styles.sendBtn}
           onClick={handleSend}
@@ -181,6 +264,9 @@ export default function ChatWindow({ messages, loading, onSend }: Props) {
           ↑
         </button>
       </div>
+      {isConnecting && (
+        <p className={styles.speechHint}>Connecting to speech service…</p>
+      )}
       <p className={styles.hint}>Press Enter to send · Shift+Enter for new line</p>
     </div>
   )

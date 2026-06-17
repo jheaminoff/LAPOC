@@ -85,7 +85,11 @@ TOOLS = [
                     "persona": {
                         "type": "string",
                         "enum": ["resident", "developer", "contractor"],
-                        "description": "The user's role — affects the plain-language guidance shown per step.",
+                        "description": (
+                            "The user's role — affects the plain-language guidance shown per step. "
+                            "Infer from context: use 'resident' for homeowners asking about their property, "
+                            "'developer' for project/entitlement questions, 'contractor' for LADBS/plan-check questions."
+                        ),
                     },
                 },
                 "required": ["process_type", "persona"],

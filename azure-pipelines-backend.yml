@@ -1,0 +1,45 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - backend/*
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azureSubscription: 'tre-sc-ai-tech-lab'
+  webAppName: 'tre-app-lapoc'
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.12'
+      addToPath: true
+
+  - script: |
+      python -m pip install --upgrade pip
+      pip install -r backend/requirements.txt
+    displayName: 'Install dependencies'
+
+  - task: ArchiveFiles@2
+    inputs:
+      rootFolderOrFile: 'backend'
+      includeRootFolder: false
+      archiveType: 'zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+      replaceExistingArchive: true
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+      ArtifactName: 'drop'
+
+  - task: AzureWebApp@1
+    inputs:
+      azureSubscription: '$(azureSubscription)'
+      appName: '$(webAppName)'
+      package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+      startUpCommand: 'cd backend && python -m seed.seed_data && uvicorn main:app --host 0.0.0.0 --port ${PORT}'

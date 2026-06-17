@@ -1,0 +1,9 @@
+.container {
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1c2253 0%, #2a3570 50%, #1c2253 100%);
+  box-shadow: 0 8px 32px rgba(28, 34, 83, 0.3);
+  margin: 0 auto;
+}
