@@ -5,6 +5,14 @@ import { resolve } from 'path'
 export default defineConfig({
   plugins: [react()],
   assetsInclude: ['**/*.glb'],
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        presentation: resolve(__dirname, 'presentation.html'),
+      },
+    },
+  },
   optimizeDeps: {
     include: ['microsoft-cognitiveservices-speech-sdk'],
   },

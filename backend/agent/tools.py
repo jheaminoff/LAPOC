@@ -1,6 +1,7 @@
 """Agent tool functions — each wraps DB queries and returns plain-text summaries."""
 
 import json
+import re
 
 import httpx
 from models import Case, Plot, WorkflowPersona, WorkflowStep
@@ -378,8 +379,32 @@ def lookup_address(address: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Tool 5: check_adu_eligibility
+# ZIMAS API — live parcel data fallback
 # --------------------------------------------------------------------------- #
+
+_ZIMAS_HEADERS = {
+    "User-Agent": "LAPOC-Backend/1.0",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://zimas.lacity.org/",
+}
+
+_ZIMAS_PARCEL_LAYER = {
+    "source": {
+        "type": "dataLayer",
+        "fields": [
+            {"alias": "PIN", "name": "PIN", "type": "esriFieldTypeString", "nullable": True},
+            {"alias": "ADDRESS", "name": "ADDRESS", "type": "esriFieldTypeString", "nullable": True},
+            {"alias": "HSE_NBR", "name": "HSE_NBR", "type": "esriFieldTypeString", "nullable": True},
+            {"alias": "HSE_DIR_CD", "name": "HSE_DIR_CD", "type": "esriFieldTypeString", "nullable": True},
+            {"alias": "PART_STR_NM", "name": "PART_STR_NM", "type": "esriFieldTypeString", "nullable": True},
+        ],
+        "dataSource": {
+            "type": "table",
+            "workspaceId": "zimas4",
+            "dataSourceName": "zim4s.search_addressparts",
+        },
+    }
+}
 
 _RESIDENTIAL_ZONE_PREFIXES = ("R1", "R2", "R3", "R4", "R5", "RD", "RW", "RU", "RA", "RE", "RS")
 
@@ -390,89 +415,114 @@ def check_adu_eligibility(apn_or_address: str, db: Session) -> str:
     evaluating zoning, overlays, hazards, and historic status.
     Returns a structured ADU ELIGIBILITY CHECK: block.
     """
-    plot = db.query(Plot).filter(Plot.apn == apn_or_address).first()
+    try:
+        plot = db.query(Plot).filter(Plot.apn == apn_or_address).first()
 
-    if not plot:
-        plots = (
-            db.query(Plot)
-            .filter(Plot.address.ilike(f"%{apn_or_address}%"))
-            .limit(5)
-            .all()
-        )
-        if not plots:
-            return f"No parcel found matching '{apn_or_address}'."
-        if len(plots) > 1:
-            lines = [f"Multiple parcels matched '{apn_or_address}':"]
-            for p in plots:
-                lines.append(f"  \u2022 APN {p.apn} \u2014 {p.address}")
-            lines.append("Please specify the APN to continue.")
-            return "\n".join(lines)
-        plot = plots[0]
+        if not plot:
+            plots = (
+                db.query(Plot)
+                .filter(Plot.address.ilike(f"%{apn_or_address}%"))
+                .limit(5)
+                .all()
+            )
+            if plots:
+                if len(plots) > 1:
+                    lines = [f"Multiple parcels matched '{apn_or_address}':"]
+                    for p in plots:
+                        lines.append(f"  \u2022 APN {p.apn} \u2014 {p.address}")
+                    lines.append("Please specify the APN to continue.")
+                    return "\n".join(lines)
+                plot = plots[0]
 
+        if plot:
+            return _format_adu_eligibility(_plot_to_adu_fields(plot))
+    except Exception:
+        pass
+
+    zimas_data = _zimas_lookup(apn_or_address)
+    if zimas_data is None:
+        return f"No parcel found matching '{apn_or_address}'."
+    return _format_adu_eligibility(zimas_data)
+
+
+# --------------------------------------------------------------------------- #
+# ADU helpers — shared between DB and ZIMAS paths
+# --------------------------------------------------------------------------- #
+
+
+def _plot_to_adu_fields(plot: Plot) -> dict:
+    """Extract a flat dict of ADU-relevant fields from a DB Plot."""
+    overlays = []
+    if plot.zoning_overlays:
+        try:
+            overlays = json.loads(plot.zoning_overlays) or []
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {
+        "address": plot.address,
+        "apn": plot.apn,
+        "zoning": plot.zoning or "",
+        "hpoz": plot.hpoz_hcm or "",
+        "flood_zone": plot.flood_zone or "",
+        "fire_hazard": plot.fire_hazard_severity or "",
+        "hillside_area": plot.hillside_area or "",
+        "zoning_overlays": overlays,
+    }
+
+
+def _format_adu_eligibility(fields: dict) -> str:
+    """Generate the ADU ELIGIBILITY CHECK: block from a fields dict."""
+    zoning = fields["zoning"]
     lines = [
-        f"ADU ELIGIBILITY CHECK for {plot.address}",
-        f"  APN: {plot.apn}",
-        f"  Zoning: {plot.zoning}",
+        f"ADU ELIGIBILITY CHECK for {fields['address']}",
+        f"  APN: {fields['apn']}",
+        f"  Zoning: {zoning}",
         "",
     ]
 
-    # --- 1. ZONING ---
-    zoning_ok = any(plot.zoning.startswith(p) for p in _RESIDENTIAL_ZONE_PREFIXES)
+    zoning_ok = any(zoning.startswith(p) for p in _RESIDENTIAL_ZONE_PREFIXES)
     if zoning_ok:
         lines.append("  ZONING: \u2705 Residential zone \u2014 ADU permitted by right")
     else:
-        lines.append(
-            "  ZONING: \u274c Non-residential zone \u2014 ADU not permitted"
-        )
+        lines.append("  ZONING: \u274c Non-residential zone \u2014 ADU not permitted")
 
-    # --- 2. HPOZ ---
-    hpoz = plot.hpoz_hcm
+    hpoz = fields["hpoz"]
     if hpoz and hpoz.strip().lower() not in ("", "no", "none"):
         lines.append(
             f"  HPOZ: \u26a0 {hpoz} \u2014 ADU allowed, requires HPOZ ministerial review (ADUH case type)"
         )
 
-    # --- 3. FLOOD ZONE ---
-    flood = plot.flood_zone
-    if flood and "outside" not in flood.lower():
+    flood = fields["flood_zone"]
+    if flood and "outside" not in flood.lower() and "none" not in flood.lower():
         lines.append(
             f"  FLOOD ZONE: \u26a0 {flood} \u2014 ADU allowed, requires flood-proofing per FEMA standards"
         )
 
-    # --- 4. FIRE HAZARD ---
-    fire = plot.fire_hazard_severity
-    if fire and fire.lower() == "very high":
+    fire = fields["fire_hazard"]
+    if fire and fire.strip().lower() == "very high":
         lines.append(
             "  FIRE HAZARD: \u26a0 Very High Fire Hazard Severity Zone \u2014 "
             "ADU allowed, requires fire-hardened construction (ignition-resistant materials, ember-resistant vents)"
         )
 
-    # --- 5. HILLSIDE (HCR) ---
-    if plot.hillside_area == "Yes":
+    hillside = fields["hillside_area"]
+    if hillside and hillside.strip().lower() == "yes":
         lines.append(
             "  HILLSIDE (HCR): \u26a0 Hillside Construction Regulation area \u2014 "
             "ADU allowed, expects HCR-compliant site plan (soils report, grading plan)"
         )
 
-    # --- 6. COASTAL ZONE ---
-    if plot.zoning_overlays:
-        try:
-            overlays = json.loads(plot.zoning_overlays)
-            coastal = [o for o in overlays if "coastal" in o.lower()]
-            if coastal:
-                lines.append(
-                    "  COASTAL ZONE: \u26a0 Coastal Zone overlay \u2014 "
-                    "ADU may require a Coastal Development Permit"
-                )
-        except (json.JSONDecodeError, TypeError):
-            pass
+    overlays = fields.get("zoning_overlays", [])
+    if isinstance(overlays, list):
+        coastal = [o for o in overlays if "coastal" in o.lower()]
+        if coastal:
+            lines.append(
+                "  COASTAL ZONE: \u26a0 Coastal Zone overlay \u2014 "
+                "ADU may require a Coastal Development Permit"
+            )
 
-    # --- SUMMARY ---
     lines.append("")
-    # Detect constraint lines (⚠ or ❌ appear mid-line in field entries)
-    constraints = [
-        s for s in lines if "\u26a0" in s or "\u274c" in s
-    ]
+    constraints = [s for s in lines if "\u26a0" in s or "\u274c" in s]
     if not zoning_ok:
         lines.append("  OVERALL: \u274c NOT ELIGIBLE")
         lines.append(
@@ -495,6 +545,160 @@ def check_adu_eligibility(apn_or_address: str, db: Session) -> str:
         )
 
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# ZIMAS API — live parcel data lookup
+# --------------------------------------------------------------------------- #
+
+_ZIMAS_ARCGIS_URL = (
+    "https://zimas.lacity.org/arcgis/rest/services/zm4/landbase/MapServer/dynamicLayer/query"
+)
+_ZIMAS_PROJECT_DATA_URL = "https://zimas.lacity.org/zm4WS/GetProjectData"
+
+
+def _parse_address_parts(address: str) -> dict | None:
+    """Split an address into house number, direction, and normalized street name."""
+    address = address.strip()
+    m = re.match(r"(\d+(?:/\d+)?)\s+(.*)", address)
+    if not m:
+        return None
+    house = m.group(1)
+    rest = m.group(2).strip()
+    dir_m = re.match(r"(N|S|E|W|North|South|East|West)\s+(.*)", rest, re.IGNORECASE)
+    if dir_m:
+        direction = dir_m.group(1).upper()[0]
+        street = dir_m.group(2)
+    else:
+        direction = None
+        street = rest
+    street = street.upper().strip()
+    street = re.sub(r"\bDRIVE\b", "DR", street)
+    street = re.sub(r"\bSTREET\b", "ST", street)
+    street = re.sub(r"\bAVENUE\b", "AVE", street)
+    street = re.sub(r"\bBOULEVARD\b", "BLVD", street)
+    street = re.sub(r"\bLANE\b", "LN", street)
+    street = re.sub(r"\bCOURT\b", "CT", street)
+    street = re.sub(r"\bPLACE\b", "PL", street)
+    street = re.sub(r"\bROAD\b", "RD", street)
+    street = re.sub(r"\bHIGHWAY\b", "HWY", street)
+    street = re.sub(r"\bCIRCLE\b", "CIR", street)
+    street = re.sub(r"\bWAY\b", "WY", street)
+    return {"house": house, "direction": direction, "street": street}
+
+
+def _zimas_get_pin(address: str) -> str | None:
+    """Search ZIMAS parcel address layer to find the PIN for a given address."""
+    parts = _parse_address_parts(address)
+    if parts is None:
+        return None
+
+    where_parts = [f"(HSE_NBR in ({parts['house']}))"]
+    if parts["direction"]:
+        where_parts.append(f"(HSE_DIR_CD like '{parts['direction']}')")
+    where_parts.append(f"(PART_STR_NM like '{parts['street']}%')")
+    where = " AND ".join(where_parts)
+
+    params = {
+        "f": "json",
+        "outFields": "PIN,ADDRESS",
+        "returnDistinctValues": "true",
+        "returnGeometry": "false",
+        "spatialRel": "esriSpatialRelIntersects",
+        "where": where,
+        "layer": json.dumps(_ZIMAS_PARCEL_LAYER),
+    }
+    try:
+        resp = httpx.get(_ZIMAS_ARCGIS_URL, params=params, headers=_ZIMAS_HEADERS, timeout=15.0)
+        resp.raise_for_status()
+        data = resp.json()
+        features = data.get("features", [])
+        if not features:
+            return None
+        exact = [f for f in features if f["attributes"].get("ADDRESS", "").upper().startswith(parts["house"])]
+        if exact:
+            return exact[0]["attributes"]["PIN"]
+        return features[0]["attributes"]["PIN"]
+    except Exception:
+        return None
+
+
+def _zimas_get_project_data(pin: str) -> list | None:
+    """Fetch the full ZIMAS project-data JSON for a given PIN."""
+    params = {"PIN": pin, "APN": "", "project": ""}
+    try:
+        resp = httpx.get(
+            _ZIMAS_PROJECT_DATA_URL,
+            params=params,
+            headers=_ZIMAS_HEADERS,
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+def _zimas_extract_adu_fields(zimas_data: list) -> dict | None:
+    """Pull ADU-relevant fields out of the ZIMAS GetProjectData response."""
+    if not zimas_data or not isinstance(zimas_data, list):
+        return None
+
+    def _find(section_key: str, desc: str) -> str:
+        for section in zimas_data:
+            if section.get("Key") == section_key:
+                for item in section.get("Value", []):
+                    if item.get("Description") == desc:
+                        return item.get("Value", "")
+        return ""
+
+    def _find_all(section_key: str, desc: str) -> list[str]:
+        results = []
+        for section in zimas_data:
+            if section.get("Key") == section_key:
+                for item in section.get("Value", []):
+                    if item.get("Description") == desc:
+                        v = item.get("Value", "")
+                        if v:
+                            results.append(v)
+        return results
+
+    zoning = _find("Planning and Zoning Information", "Zoning")
+    hpoz = _find("Planning and Zoning Information", "Historic Preservation Review")
+    flood = _find("Additional Information", "Flood Zone")
+    fire = _find("Additional Information", "Very High Fire Hazard Severity Zone")
+    coastal = _find("Additional Information", "Coastal Zone")
+    hillside = _find("Planning and Zoning Information", "Hillside Area (Zoning Code)")
+    address = _find("Address/Legal Information", "Site Address")
+    apn = _find("Address/Legal Information", "Assessor Parcel No. (APN)")
+
+    # Build zoning overlays list from ZI items
+    zi_items = _find_all("Planning and Zoning Information", "Zoning Information (ZI)")
+    overlays = list(zi_items)
+    if coastal and coastal.lower() != "none":
+        overlays.append(f"Coastal Zone: {coastal}")
+
+    return {
+        "address": address or "Unknown",
+        "apn": apn or "Unknown",
+        "zoning": zoning,
+        "hpoz": hpoz,
+        "flood_zone": flood,
+        "fire_hazard": fire,
+        "hillside_area": hillside,
+        "zoning_overlays": overlays,
+    }
+
+
+def _zimas_lookup(address: str) -> dict | None:
+    """Look up a parcel via the ZIMAS API by address, returns ADU fields dict."""
+    pin = _zimas_get_pin(address)
+    if not pin:
+        return None
+    raw = _zimas_get_project_data(pin)
+    if not raw:
+        return None
+    return _zimas_extract_adu_fields(raw)
 
 
 def _fmt_apn(loc: dict) -> str:

@@ -15,7 +15,7 @@ Stack: **Python FastAPI + SQLite** (backend) · **React 18 + TypeScript + Vite**
 | Lint | `frontend/` | `npx eslint src/` |
 | Production build | `frontend/` | `npm run build` (runs `tsc -b && vite build`) |
 | API docs | — | `open http://localhost:8000/docs` |
-| Install deps (CI uses) | `frontend/` | `npm ci` (not `npm install`) |
+| Install deps (CI uses) | `frontend/` | `npm ci` |
 
 **Verification order**: lint → typecheck → build. No test runner exists.
 
@@ -25,120 +25,79 @@ Stack: **Python FastAPI + SQLite** (backend) · **React 18 + TypeScript + Vite**
 
 - **CSS Modules only** — no Tailwind, no inline styles. Every component has a paired `*.module.css`.
 - **`@/` alias** → `src/`. Use it for all non-relative imports.
-- **`VITE_API_URL`**: empty string in `frontend/.env.development` (Vite proxy handles it); set to `https://tre-app-lapoc.azurewebsites.net` in `.env.production`.
-- **tsconfig strict**: `strict`, `noUnusedLocals`, `noUnusedParameters` are all on. Unused variables are errors, not warnings — ESLint also enforces this with `varsIgnorePattern: '^_'`.
+- **`VITE_API_URL`**: empty string in development (Vite proxy handles it); set to `https://tre-app-lapoc.azurewebsites.net` in production.
+- **tsconfig strict**: `strict`, `noUnusedLocals`, `noUnusedParameters` all on. Prefix unused vars with `_` (ESLint enforces via `varsIgnorePattern: '^_'` and `argsIgnorePattern: '^_'`).
 - **Vite proxy** (dev only): `/plots`, `/cases`, `/chat`, `/health`, `/speech-token`, `/static` → `localhost:8000`.
-- **Three.js / R3F** present (`@react-three/fiber`, `@react-three/drei`, `three`) — `.glb` assets included via `assetsInclude`.
-- **Azure Speech SDK** (`microsoft-cognitiveservices-speech-sdk`) requires special Vite `optimizeDeps.include` — already configured in `vite.config.ts`; don't remove it.
+- **Three.js / R3F** present — `.glb` assets via `assetsInclude` in `vite.config.ts`.
+- **React-Leaflet** present (`MapCard`) — `leaflet` + `react-leaflet` in deps.
+- **Azure Speech SDK** — `optimizeDeps.include` in `vite.config.ts`; do not remove.
+- **`presentation.html`** is a second rollup entry point (`vite.config.ts`).
 
 ---
 
-## Project layout
+## Structured text protocol (sentinels)
 
-```
-backend/
-  main.py              load_dotenv() FIRST (line 7), then create_all(), CORS, 4 routers
-  database.py          SQLAlchemy engine + session (lapoc.db relative to CWD)
-  models.py            Plot, Case, WorkflowStep, WorkflowPersona
-  schemas.py           Pydantic v2
-  routers/             plots.py, cases.py (includes /random), chat.py, token.py
-  agent/
-    agent.py           AsyncAzureOpenAI loop + persona system prompts + suggestion generation
-    tools.py           lookup_parcel, get_case_detail, get_workflow
-    prompts/           system_prompts.jinja  ← Jinja2 blocks per persona
-  seed/seed_data.py    Destructive reseed — 10 parcels, 30 cases, 135 steps, 99 persona rows
-  static/              Served at /static (video banner etc.)
-frontend/
-  src/pages/Chat.tsx          Main page: suggestions, scroll, speech, error banner
-  src/components/
-    ChatWindow.tsx            Bubble renderer, inline markdown, card wiring (useCardData hook)
-    ParcelCard.tsx            Parcel card + parseParcelText()
-    CaseDetailCard.tsx        Case card + parseCaseDetailText()
-    WorkflowTimeline.tsx      Animated step timeline + parseWorkflowText()
-    CaseStatusBadge.tsx       Inline status pill (suppressed when CaseDetailCard renders)
-    ChatMascot.tsx            3D mascot driven by viseme + conversation state
-    PersonSelector.tsx        Persona picker card (landing screen)
-  src/hooks/                  useSpeechToken (auto-refreshes every 9 min), useSpeechRecognizer,
-                              useSpeechSynthesizer, useVisemeScheduler
-  src/styles/tokens.ts        LA brand colours (#1c2253 navy) + fonts (Montserrat + Open Sans)
-  src/types/                  Shared TypeScript types
-  src/utils/                  Utility helpers
-```
+The LLM returns card/map data as plain text with sentinel prefixes. **New tool output must use a sentinel prefix** or the frontend can't render it as a card.
 
----
-
-## Structured text protocol
-
-The LLM returns card data as plain text with sentinel prefixes. **Any new tool must follow this format** or the frontend parser returns null and only raw text is shown.
-
-| Sentinel | Parser in component | Renders as |
+| Sentinel | Frontend parser | Renders as |
 |---|---|---|
 | `PARCEL:` | `parseParcelText()` in `ParcelCard.tsx` | Property info + cases table |
 | `CASE DETAIL:` | `parseCaseDetailText()` in `CaseDetailCard.tsx` | Status + fees + next-action |
 | `WORKFLOW:` | `parseWorkflowText()` in `WorkflowTimeline.tsx` | Animated step timeline |
+| `MAP:` | `parseMapText()` in `MapCard.tsx` | Leaflet map with marker |
+| `ADU ELIGIBILITY CHECK:` | **No card component exists** — renders as raw text in bubble | Raw prose only |
 
-Format: field labels indented 2 spaces; empty lines separate sections. `ChatWindow.tsx` strips sentinel blocks from the prose bubble via `stripStructuredBlocks()` so they don't render twice.
+Format: field labels indented 2 spaces; empty lines separate sections. `ChatWindow.tsx` strips known sentinel blocks from the prose bubble via `stripStructuredBlocks()` — only `PARCEL:`, `CASE DETAIL:`, `WORKFLOW:`, and `MAP:` are in `SENTINEL_RE`. `ADU ELIGIBILITY CHECK:` is **not** stripped, so it renders as text in the bubble alongside any fallback.
 
-**Full checklist to add a new card type**: sentinel prefix in tool output → `parseXxxText()` → React component → `*.module.css` → wire into `ChatWindow.tsx` `useCardData()` and `AssistantContent`.
+To add a new sentinel card: sentinel in tool output → `parseXxxText()` → React component → `*.module.css` → wire into `ChatWindow.tsx` `useCardData()` and `AssistantContent` → add to `SENTINEL_RE` and `stripStructuredBlocks()`.
 
 ---
 
-## Agent
+## Agent tools
 
-**Three tools** in `agent/tools.py`, registered as OpenAI function schemas in `agent.py`:
+**Five tools** in `agent/tools.py`, registered as OpenAI function schemas in `agent.py`:
 
-| Tool | Key arg | Notes |
+| Tool | Key args | Returns |
 |---|---|---|
-| `lookup_parcel(apn_or_address)` | APN `XXXX-XXX-XXX` or partial address | Returns `PARCEL:` block |
-| `get_case_detail(case_id)` | LADBS or City Planning case ID | Returns `CASE DETAIL:` block |
-| `get_workflow(process_type, persona)` | One of 20 process types + persona | Returns `WORKFLOW:` block |
+| `lookup_parcel(apn_or_address)` | APN `XXXX-XXX-XXX` or partial address | `PARCEL:` block |
+| `get_case_detail(case_id)` | LADBS or City Planning case ID | `CASE DETAIL:` block |
+| `get_workflow(process_type, persona)` | Process type + persona (`resident`/`developer`/`contractor`) | `WORKFLOW:` block |
+| `lookup_address(address)` | Street address | Prose + `MAP:` block (Leaflet coords) |
+| `check_adu_eligibility(apn_or_address)` | APN or partial address | `ADU ELIGIBILITY CHECK:` block |
 
-`run_agent` loop: max 6 iterations, `tool_choice: "auto"`, returns `(reply_text, tool_names_called, detected_persona)`.
+`lookup_address` calls the LA City BOE GeoQuery API with a **hardcoded API key** (`tools.py:245`). The other four hit SQLite.
 
-**System prompts** are Jinja2 blocks in `agent/prompts/system_prompts.jinja` — one block per persona (`resident`, `developer`, `contractor`, `auto`) plus a `suggest` block for suggestion generation. Edit there, not inline in Python.
-
-**To add a tool**: implement in `tools.py` → add schema to `TOOLS` list in `agent.py` → add dispatch branch in `_dispatch_tool()`.
-
-**Persona**: frontend always sends `persona: "auto"`. LLM appends `[PERSONA:resident|developer|contractor]` on first reply only; `_extract_persona_tag()` strips it before returning. Tag may re-appear on subsequent turns.
-
-**Dynamic follow-up suggestions**: `generate_suggestions()` in `agent.py` fires a second LLM call after the first user message only (`is_first_query` check in `chat.py`). Falls back to keyed defaults if the LLM returns malformed JSON.
-
-**TTS keynotes**: `generate_speech_keynotes()` in `agent.py` fires a third LLM call on every response, producing a 1-2 sentence spoken summary (max 40 words, no markdown). Result is `speech_text` in `ChatResponse`. Falls back to regex-stripped first two sentences if the LLM call fails.
-
-| Persona | Style |
-|---|---|
-| `resident` | Plain language, define jargon, next steps |
-| `developer` | Technical LA planning terms (LOD, CEQA, ZIMAS, DSC), flag risks |
-| `contractor` | LADBS terms (PC branch, TCO vs CofO, inspection codes) |
+`run_agent` loop: max 6 iterations, `tool_choice: "auto"`, returns `(reply_text, tool_names_called, detected_persona)`. Add a tool by implementing in `tools.py` → adding schema to `TOOLS` list in `agent.py` → adding dispatch branch in `_dispatch_tool()`.
 
 ---
 
-## Data model
+## System prompts
 
-- **DB location**: `lapoc.db` relative to CWD — place it in `backend/` when running from there. `.gitignore` excludes `*.db`. A second `lapoc.db` may exist at repo root if seeded from root.
-- **APN format**: `XXXX-XXX-XXX` (LA County). 10 seed parcels use real APNs.
-- **Case ID formats**: LADBS `YY-TTT-OO-MMM-#####` · City Planning `PREFIX-YEAR-SEQ-SUFFIX`
-- **30 seed case IDs** listed in `case_numbers.md` at root — useful for testing tool calls.
-- **Case fields not exposed by tools**: `valuation`, `pc_job_number`, `plan_type`, `conditions_of_approval`.
-- **20 workflow process types**: `ADU`, `ADU_standard`, `Bldg-New`, `Bldg-Alter/Repair`, `Bldg-Addition`, `CUB`, `ZC`, `ZV`, `ADJ`, `TOC`, `CDP`, `EIR`, `PM`, `SPPA`, `Grading`, `Electrical`, `Plumbing`, `HVAC`, `Fire Sprinkler`, `Swimming-Pool/Spa`
+Jinja2 blocks in `agent/prompts/system_prompts.jinja` — edit there, not inline in Python. Blocks: `resident`, `developer`, `contractor`, `auto`, `suggest`. The `base` block is extended by the others. The `auto` persona appends `[PERSONA:resident|developer|contractor]` only on the first reply.
+
+**Dynamic suggestions**: fires a second LLM call after the first user message only (`is_first_query` check in `chat.py`). Falls back to keyed defaults if JSON is malformed.
+
+**TTS keynotes**: fires a third LLM call on every response, producing max 40 words spoken summary. Falls back to regex-stripped first two sentences.
 
 ---
 
-## Gotchas
+## Backend gotchas
 
-- **`load_dotenv()` before all imports** — `main.py` line 7 calls it before importing routers/models. Any module-level code that reads env vars must be in `main.py` or called after startup; it will not see vars if it runs at import time in a router.
-- **Azure-only LLM client** — `AsyncAzureOpenAI` in `agent.py`. To switch to standard OpenAI, replace client init and `model=` argument; comments in the file describe how.
-- **Azure OpenAI endpoint format** — `AZURE_OPENAI_ENDPOINT` must have **no trailing slash** and no `/openai/...` path suffix (bare base URL only). See `.env.example`.
-- **Azure Speech** — frontend `useSpeechToken` calls `/speech-token` every 9 min. Requires `AZURE_SPEECH_ENDPOINT` + `AZURE_SPEECH_KEY` in `backend/.env`. These are **not** in `.env.example`. Speech fails silently if missing; chat still works.
-- **30s fetch timeout** — `Chat.tsx` aborts `/chat` requests after 30 s. Deep agent chains (6 iterations × slow tool) can hit this.
-- **CORS origins** — hardcoded in `main.py`: `localhost:5173`, `localhost:3000`, `https://mango-pond-098047a03.7.azurestaticapps.net`. Add new deploy URLs here.
-- **CI reseeds on every deploy** — `azure-pipelines-backend.yml` startup command is `python -m seed.seed_data && uvicorn …`. Production data is always synthetic seed data.
-- **CI uses Python 3.12 / Node 20** — local dev needs Python 3.11+ and Node 18+; CI is pinned to 3.12 and 20.x.
-- **`/static` proxy** — Vite proxies `/static` to the backend in dev. The backend mounts `StaticFiles(directory="static")`. The video banner (`lacity-banner.mp4`) is served this way.
-- **No tests** — zero test files, no pytest/vitest/jest config. Only verification is typecheck + lint + build.
-- **`/cases/random` route order** — must be declared before `/{case_id}` in `cases.py` (already correct); reordering breaks it because FastAPI would parse the literal string "random" as a case ID.
-- **`.glb` assets** — `assetsInclude: ['**/*.glb']` in `vite.config.ts` is required for the mascot model import; removing it breaks the R3F scene.
-- **`WorkflowTimeline` collapse** — timelines with more than 7 steps collapse to show only the first 5 steps, with a "Show all N steps" toggle. Keep this threshold in mind when adding steps.
-- **Unused variable convention** — prefix intentionally unused variables or parameters with `_` (e.g., `_s`, `_ref`) to satisfy `noUnusedLocals` / `noUnusedParameters` and the ESLint `varsIgnorePattern: '^_'` rule.
-- **Greeting audio is cached in IndexedDB** — key `"greeting"` via `src/utils/audioCache.ts`. Stale audio survives page reloads. Clear IndexedDB manually when testing greeting changes.
-- **`Landing.module.css` has no paired component** — the file exists but `Landing.tsx` was removed. `App.tsx` routes directly to `<Chat>` and redirects all other paths to `/`. The CSS file is a stale artifact; don't create a `Landing.tsx` unless intentionally restoring that page.
+- **`load_dotenv()` before all imports** — `main.py` line 7. Any module-level code reading env vars must be in `main.py` or after startup; router-level code is fine.
+- **Azure-only LLM** — `AsyncAzureOpenAI` in `agent.py`. Comments describe how to swap to standard OpenAI.
+- **Azure OpenAI endpoint format** — no trailing slash, no `/openai/...` path suffix. See `.env.example`.
+- **Azure Speech** — `/speech-token` proxied every 9 min. Requires `AZURE_SPEECH_ENDPOINT` + `AZURE_SPEECH_KEY` (not in `.env.example`). Speech fails silently.
+- **DB location**: `lapoc.db` relative to CWD (`.gitignore`).
+- **CI reseeds every deploy** — `python -m seed.seed_data && uvicorn …` in `azure-pipelines-backend.yml`. Production data is always synthetic.
+- **`/cases/random` route** — must be declared before `/{case_id}` (already correct).
+- **CORS origins** — hardcoded in `main.py`. Add new deploy URLs here.
+- **Unused model fields** (not exposed by tools): `valuation`, `pc_job_number`, `plan_type`, `conditions_of_approval`.
+
+---
+
+## Frontend gotchas
+
+- **30s fetch timeout** — `Chat.tsx` aborts `/chat` after 30 s. Deep agent chains (6 iterations × slow tool) can hit this.
+- **Greeting audio cached in IndexedDB** — key `"greeting"` via `src/utils/audioCache.ts`. Stale audio survives reloads; clear IndexedDB manually when testing.
+- **`Landing.module.css` has no paired component** — stale artifact from removed `Landing.tsx`. Don't recreate it unless intentional.
+- **`WorkflowTimeline` collapse** — >7 steps shows only first 5, with "Show all N steps" toggle.
