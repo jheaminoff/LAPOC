@@ -323,13 +323,13 @@ async def generate_speech_keynotes(reply: str) -> str:
             continue
         clean.append(s)
     text = " ".join(clean)
-    text = _re.sub(r"#{1,6}\s+", "", text)
-    text = _re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
-    text = _re.sub(r"`[^`]+`", "", text)
-    text = _re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-    text = _re.sub(r"^\s*[-*•]\s+", "", text, flags=_re.MULTILINE)
-    text = _re.sub(r"\s{2,}", " ", text).strip()
-    sentences = _re.split(r"(?<=[.!?])\s+", text)
+    text = re.sub(r"#{1,6}\s+", "", text)
+    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+    text = re.sub(r"`[^`]+`", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"^\s*[-*•]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    sentences = re.split(r"(?<=[.!?])\s+", text)
     return " ".join(sentences[:2]).strip()
 
 

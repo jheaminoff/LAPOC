@@ -57,19 +57,6 @@ class ParcelResult(BaseModel):
     cases: list[CaseOut]
 
 
-class WorkflowStepOut(BaseModel):
-    step_order: int
-    step_name: str
-    description: Optional[str] = None
-    responsible_party: Optional[str] = None
-    typical_days: Optional[str] = None
-    guidance: Optional[str] = (
-        None  # persona-specific note (joined from workflow_personas)
-    )
-
-    model_config = {"from_attributes": True}
-
-
 class ChatMessage(BaseModel):
     role: str  # "user" | "assistant"
     content: str

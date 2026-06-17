@@ -204,7 +204,7 @@ export default function ChatWindow({
         {messages.map((msg, i) => (
           <div
             key={i}
-            className={`${styles.bubble} ${msg.role === 'user' ? styles.user : styles.assistant}`}
+            className={`${styles.bubble}${msg.role === 'user' ? ` ${styles.user}` : ''}`}
           >
             {msg.role === 'assistant' && (
               <span className={styles.avatar}>LA</span>
@@ -238,7 +238,7 @@ export default function ChatWindow({
         )}
 
         {loading && (
-          <div className={`${styles.bubble} ${styles.assistant}`}>
+          <div className={styles.bubble}>
             <span className={styles.avatar}>LA</span>
             <div className={styles.content}>
               <div className={styles.typing}>
