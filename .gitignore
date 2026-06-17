@@ -12,7 +12,6 @@ node_modules/
 .next/
 .DS_Store
 *.db
-backend/static/
 .playwright-mcp/
 lacity-homepage
 localhost-snapshot

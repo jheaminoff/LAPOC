@@ -488,7 +488,7 @@ export default function Chat() {
       <footer className={styles.siteFooter}>
         <div className={styles.videoBanner} aria-hidden="true">
           <video
-            src="/static/lacity-banner.mp4"
+            src={`${import.meta.env.VITE_API_URL}/static/lacity-banner.mp4`}
             className={styles.bannerVideo}
             autoPlay
             loop
