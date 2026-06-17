@@ -521,10 +521,10 @@
    VIDEO BANNER — full-width banner above footer
 ═══════════════════════════════════════════════ */
 .videoBanner {
-  position: relative;
-  height: 300px;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  background: #1c2253;
+  z-index: 0;
 }
 
 .bannerVideo {
@@ -541,12 +541,25 @@
    SITE FOOTER — lacity.gov-style
 ═══════════════════════════════════════════════ */
 .siteFooter {
+  position: relative;
+  overflow: hidden;
   background: #1c2253;
   color: rgba(255, 255, 255, 0.75);
   flex-shrink: 0;
 }
 
+.siteFooter::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(28, 34, 83, 0.8);
+  z-index: 1;
+  pointer-events: none;
+}
+
 .footerInner {
+  position: relative;
+  z-index: 2;
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px;

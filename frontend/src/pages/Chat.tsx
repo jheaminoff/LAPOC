@@ -6,13 +6,13 @@ import { useSpeechToken } from '@/hooks/useSpeechToken'
 import { useSpeechRecognizer } from '@/hooks/useSpeechRecognizer'
 import { useSpeechSynthesizer } from '@/hooks/useSpeechSynthesizer'
 import { useVisemeScheduler } from '@/hooks/useVisemeScheduler'
-import { getCachedAudio, setCachedAudio } from '@/utils/audioCache'
 import type { ConversationState } from '@/types/speech'
 import styles from './Chat.module.css'
 
 export type Message = {
   role: 'user' | 'assistant'
   content: string
+  speechText?: string
 }
 
 const GREETING =
@@ -101,7 +101,7 @@ const FETCH_TIMEOUT_MS = 30_000
 export default function Chat() {
   const navigate = useNavigate()
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: GREETING },
+    { role: 'assistant', content: GREETING, speechText: GREETING_SPOKEN },
   ])
   const [loading, setLoading] = useState(false)
   const [detectedPersona, setDetectedPersona] = useState<string | null>(null)
@@ -132,15 +132,13 @@ export default function Chat() {
   // ── Speech hooks ──────────────────────────────────────────────────────────────
   const { token, region } = useSpeechToken()
   const { scheduleViseme, currentVisemeId, clearQueue, startPlayback } = useVisemeScheduler()
-  const { speak, playUrl, isSynthesizing, isSpeaking, stop: stopSpeaking, resumeAudio } = useSpeechSynthesizer({
+  const { speak, isSynthesizing, isSpeaking, stop: stopSpeaking, resumeAudio } = useSpeechSynthesizer({
     token,
     region,
     language: 'en-US',
     onViseme: (id, offsetMs) => scheduleViseme(id, offsetMs),
-    onSynthesized: (text, chunks) => {
-      if (text === GREETING_SPOKEN) {
-        void setCachedAudio('greeting', chunks)
-      }
+    onSynthesized: (_text, _chunks) => {
+      // Saving to IndexedDB is now handled inside useSpeechSynthesizer
     },
   })
   const {
@@ -190,23 +188,10 @@ export default function Chat() {
   useEffect(() => {
     if (isSpeechReady && !greetingSpokenRef.current) {
       greetingSpokenRef.current = true
-
-      getCachedAudio('greeting').then((cached) => {
-        if (cached) {
-          const blob = new Blob(cached, { type: 'audio/mpeg' })
-          const url = URL.createObjectURL(blob)
-          startPlayback()
-          playUrl(url)
-        } else {
-          startPlayback()
-          speak(GREETING_SPOKEN)
-        }
-      }).catch(() => {
-        startPlayback()
-        speak(GREETING_SPOKEN)
-      })
+      startPlayback()
+      speak(GREETING_SPOKEN).catch(() => {})
     }
-  }, [isSpeechReady, startPlayback, playUrl, speak])
+  }, [isSpeechReady, startPlayback, speak])
 
   // ── Shared API call logic ─────────────────────────────────────────────────────
   const sendToApi = useCallback(async (next: Message[]) => {
@@ -229,7 +214,7 @@ export default function Chat() {
       const data: ChatResponse = await res.json() as ChatResponse
       const reply = data.reply
       const speechText = data.speech_text || reply
-      setMessages([...next, { role: 'assistant', content: reply }])
+      setMessages([...next, { role: 'assistant', content: reply, speechText }])
 
       if (data.detected_persona && !detectedPersona) {
         setDetectedPersona(data.detected_persona)
@@ -237,7 +222,7 @@ export default function Chat() {
       setSuggestions(data.suggestions ?? [])
 
       startPlayback()
-      speak(speechText)
+      speak(speechText).catch(() => {})
     } catch (err) {
       const isTimeout = err instanceof DOMException && err.name === 'AbortError'
       const msg = isTimeout
@@ -341,6 +326,15 @@ export default function Chat() {
     clearQueue()
     dispatchCS({ type: 'idle' })
   }, [stopSpeaking, clearQueue])
+
+  const handleReplaySpeech = useCallback((text: string) => {
+    if (isSpeaking || isSynthesizing) {
+      stopSpeaking()
+      clearQueue()
+    }
+    startPlayback()
+    void speak(text)
+  }, [speak, startPlayback, stopSpeaking, clearQueue, isSpeaking, isSynthesizing])
 
   return (
     <div className={styles.page}>
@@ -480,6 +474,7 @@ export default function Chat() {
           isSpeaking={isSpeaking || isSynthesizing}
           onMuteToggle={handleMuteToggle}
           onStopTTS={handleStopTTS}
+          onReplaySpeech={handleReplaySpeech}
         />
         <div ref={bottomRef} />
       </main>

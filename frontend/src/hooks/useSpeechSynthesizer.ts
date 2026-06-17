@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk'
+import { getCachedAudio, setCachedAudio } from '@/utils/audioCache'
 
 interface UseSpeechSynthesizerInput {
   token: string
@@ -14,7 +15,7 @@ const VOICE_MAP: Record<string, string> = {
 }
 
 interface UseSpeechSynthesizerResult {
-  speak: (text: string) => void
+  speak: (text: string) => Promise<void>
   playUrl: (url: string) => void
   isSynthesizing: boolean
   isSpeaking: boolean
@@ -72,33 +73,54 @@ export function useSpeechSynthesizer({
     return synth
   }, [token, region, language, onViseme])
 
-  const speak = useCallback((text: string) => {
+  const playChunks = useCallback((chunks: ArrayBuffer[]) => {
     if (!audioRef.current) {
       audioRef.current = new Audio()
     }
-    const audio = audioRef.current
 
-    // ── Check cache ──
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current)
+    }
+
+    const blob = new Blob(chunks, { type: 'audio/mpeg' })
+    const url = URL.createObjectURL(blob)
+    blobUrlRef.current = url
+
+    audioRef.current.src = url
+    audioRef.current.onended = () => setIsSpeaking(false)
+    audioRef.current.onerror = () => {
+      console.warn('[TTS] Audio playback error')
+      setIsSpeaking(false)
+    }
+    setIsSpeaking(true)
+    audioRef.current.play().catch((err) => {
+      console.warn('[TTS] Audio play failed:', err)
+      setIsSpeaking(false)
+    })
+  }, [])
+
+  const speak = useCallback(async (text: string) => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio()
+    }
+
+    // ── Check in-memory cache ──
     const cachedChunks = audioCacheRef.current.get(text)
     if (cachedChunks) {
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current)
-      }
-      const blob = new Blob(cachedChunks, { type: 'audio/mpeg' })
-      const url = URL.createObjectURL(blob)
-      blobUrlRef.current = url
-      audio.src = url
-      audio.onended = () => setIsSpeaking(false)
-      audio.onerror = () => {
-        console.warn('[TTS] Cached audio playback error')
-        setIsSpeaking(false)
-      }
-      setIsSpeaking(true)
-      audio.play().catch((err) => {
-        console.warn('[TTS] Cached audio play failed:', err)
-        setIsSpeaking(false)
-      })
+      playChunks(cachedChunks)
       return
+    }
+
+    // ── Check IndexedDB cache ──
+    try {
+      const dbChunks = await getCachedAudio(text)
+      if (dbChunks) {
+        audioCacheRef.current.set(text, dbChunks)
+        playChunks(dbChunks)
+        return
+      }
+    } catch {
+      // fall through to synthesis
     }
 
     // ── Synthesis path ──
@@ -125,30 +147,12 @@ export function useSpeechSynthesizer({
         return
       }
 
-      // Cache for future reuse
+      // Cache in memory + IndexedDB for replay across page loads
       audioCacheRef.current.set(text, chunks)
+      void setCachedAudio(text, chunks)
       onSynthesized?.(text, chunks)
 
-      // Revoke previous blob URL before creating a new one
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current)
-      }
-
-      const blob = new Blob(chunks, { type: 'audio/mpeg' })
-      const url = URL.createObjectURL(blob)
-      blobUrlRef.current = url
-
-      audio.src = url
-      audio.onended = () => setIsSpeaking(false)
-      audio.onerror = () => {
-        console.warn('[TTS] Audio playback error')
-        setIsSpeaking(false)
-      }
-      setIsSpeaking(true)
-      audio.play().catch((err) => {
-        console.warn('[TTS] Audio play failed:', err)
-        setIsSpeaking(false)
-      })
+      playChunks(chunks)
     }
 
     // ── Kick off synthesis ──
@@ -175,7 +179,7 @@ export function useSpeechSynthesizer({
         synthRef.current = null
       },
     )
-  }, [buildSynthesizer, language, onSynthesized])
+  }, [buildSynthesizer, language, onSynthesized, playChunks])
 
   const playUrl = useCallback((url: string) => {
     if (!audioRef.current) {

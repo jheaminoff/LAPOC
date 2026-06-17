@@ -15,6 +15,7 @@ Stack: **Python FastAPI + SQLite** (backend) · **React 18 + TypeScript + Vite**
 | Lint | `frontend/` | `npx eslint src/` |
 | Production build | `frontend/` | `npm run build` (runs `tsc -b && vite build`) |
 | API docs | — | `open http://localhost:8000/docs` |
+| Install deps (CI uses) | `frontend/` | `npm ci` (not `npm install`) |
 
 **Verification order**: lint → typecheck → build. No test runner exists.
 
@@ -36,7 +37,7 @@ Stack: **Python FastAPI + SQLite** (backend) · **React 18 + TypeScript + Vite**
 
 ```
 backend/
-  main.py              load_dotenv() FIRST (line 6), then create_all(), CORS, 4 routers
+  main.py              load_dotenv() FIRST (line 7), then create_all(), CORS, 4 routers
   database.py          SQLAlchemy engine + session (lapoc.db relative to CWD)
   models.py            Plot, Case, WorkflowStep, WorkflowPersona
   schemas.py           Pydantic v2
@@ -56,9 +57,12 @@ frontend/
     WorkflowTimeline.tsx      Animated step timeline + parseWorkflowText()
     CaseStatusBadge.tsx       Inline status pill (suppressed when CaseDetailCard renders)
     ChatMascot.tsx            3D mascot driven by viseme + conversation state
+    PersonSelector.tsx        Persona picker card (landing screen)
   src/hooks/                  useSpeechToken (auto-refreshes every 9 min), useSpeechRecognizer,
                               useSpeechSynthesizer, useVisemeScheduler
   src/styles/tokens.ts        LA brand colours (#1c2253 navy) + fonts (Montserrat + Open Sans)
+  src/types/                  Shared TypeScript types
+  src/utils/                  Utility helpers
 ```
 
 ---
@@ -99,6 +103,8 @@ Format: field labels indented 2 spaces; empty lines separate sections. `ChatWind
 
 **Dynamic follow-up suggestions**: `generate_suggestions()` in `agent.py` fires a second LLM call after the first user message only (`is_first_query` check in `chat.py`). Falls back to keyed defaults if the LLM returns malformed JSON.
 
+**TTS keynotes**: `generate_speech_keynotes()` in `agent.py` fires a third LLM call on every response, producing a 1-2 sentence spoken summary (max 40 words, no markdown). Result is `speech_text` in `ChatResponse`. Falls back to regex-stripped first two sentences if the LLM call fails.
+
 | Persona | Style |
 |---|---|
 | `resident` | Plain language, define jargon, next steps |
@@ -120,11 +126,19 @@ Format: field labels indented 2 spaces; empty lines separate sections. `ChatWind
 
 ## Gotchas
 
-- **`load_dotenv()` before all imports** — `main.py` line 6 calls it before importing routers/models. Any module-level code that reads env vars must be in `main.py` or called after startup; it will not see vars if it runs at import time in a router.
+- **`load_dotenv()` before all imports** — `main.py` line 7 calls it before importing routers/models. Any module-level code that reads env vars must be in `main.py` or called after startup; it will not see vars if it runs at import time in a router.
 - **Azure-only LLM client** — `AsyncAzureOpenAI` in `agent.py`. To switch to standard OpenAI, replace client init and `model=` argument; comments in the file describe how.
-- **Azure Speech** — frontend `useSpeechToken` calls `/speech-token` every 9 min. Requires `AZURE_SPEECH_ENDPOINT` + `AZURE_SPEECH_KEY` in `backend/.env`. Speech fails silently if missing; chat still works.
+- **Azure OpenAI endpoint format** — `AZURE_OPENAI_ENDPOINT` must have **no trailing slash** and no `/openai/...` path suffix (bare base URL only). See `.env.example`.
+- **Azure Speech** — frontend `useSpeechToken` calls `/speech-token` every 9 min. Requires `AZURE_SPEECH_ENDPOINT` + `AZURE_SPEECH_KEY` in `backend/.env`. These are **not** in `.env.example`. Speech fails silently if missing; chat still works.
 - **30s fetch timeout** — `Chat.tsx` aborts `/chat` requests after 30 s. Deep agent chains (6 iterations × slow tool) can hit this.
 - **CORS origins** — hardcoded in `main.py`: `localhost:5173`, `localhost:3000`, `https://mango-pond-098047a03.7.azurestaticapps.net`. Add new deploy URLs here.
 - **CI reseeds on every deploy** — `azure-pipelines-backend.yml` startup command is `python -m seed.seed_data && uvicorn …`. Production data is always synthetic seed data.
+- **CI uses Python 3.12 / Node 20** — local dev needs Python 3.11+ and Node 18+; CI is pinned to 3.12 and 20.x.
 - **`/static` proxy** — Vite proxies `/static` to the backend in dev. The backend mounts `StaticFiles(directory="static")`. The video banner (`lacity-banner.mp4`) is served this way.
 - **No tests** — zero test files, no pytest/vitest/jest config. Only verification is typecheck + lint + build.
+- **`/cases/random` route order** — must be declared before `/{case_id}` in `cases.py` (already correct); reordering breaks it because FastAPI would parse the literal string "random" as a case ID.
+- **`.glb` assets** — `assetsInclude: ['**/*.glb']` in `vite.config.ts` is required for the mascot model import; removing it breaks the R3F scene.
+- **`WorkflowTimeline` collapse** — timelines with more than 7 steps collapse to show only the first 5 steps, with a "Show all N steps" toggle. Keep this threshold in mind when adding steps.
+- **Unused variable convention** — prefix intentionally unused variables or parameters with `_` (e.g., `_s`, `_ref`) to satisfy `noUnusedLocals` / `noUnusedParameters` and the ESLint `varsIgnorePattern: '^_'` rule.
+- **Greeting audio is cached in IndexedDB** — key `"greeting"` via `src/utils/audioCache.ts`. Stale audio survives page reloads. Clear IndexedDB manually when testing greeting changes.
+- **`Landing.module.css` has no paired component** — the file exists but `Landing.tsx` was removed. `App.tsx` routes directly to `<Chat>` and redirects all other paths to `/`. The CSS file is a stale artifact; don't create a `Landing.tsx` unless intentionally restoring that page.

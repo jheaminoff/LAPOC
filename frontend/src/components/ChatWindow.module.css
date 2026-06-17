@@ -468,6 +468,41 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Replay TTS button ── */
+.replayBtn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid #d0d5e8;
+  background: #fff;
+  color: #1c2253;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.replayBtn:hover {
+  background: #eef0f9;
+  border-color: #1c2253;
+  color: #1c2253;
+  opacity: 1;
+}
+
+.replayBtn:active {
+  transform: scale(0.92);
+}
+
+.replayBtn:focus-visible {
+  outline: 2px solid #1c2253;
+  outline-offset: 2px;
+}
+
 /* ── Mobile ── */
 @media (max-width: 600px) {
   .content {
