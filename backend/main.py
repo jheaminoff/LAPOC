@@ -1,15 +1,15 @@
 """FastAPI application entry point."""
 
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
+from database import Base, engine
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from database import engine, Base
-from routers import plots, cases, chat, token
+from routers import cases, chat, plots, token
 
 # Create tables on startup
 Base.metadata.create_all(bind=engine)

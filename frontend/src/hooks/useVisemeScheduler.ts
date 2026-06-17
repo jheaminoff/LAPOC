@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import type { VisemeEvent } from '@/types/speech'
 
 interface UseVisemeSchedulerResult {
@@ -13,6 +13,7 @@ export function useVisemeScheduler(): UseVisemeSchedulerResult {
   const queueRef = useRef<VisemeEvent[]>([])
   const startTimeRef = useRef<number>(0)
   const rafRef = useRef<number>(0)
+  const tickRef = useRef<(() => void) | null>(null)
 
   const tick = useCallback(() => {
     const elapsed = Date.now() - startTimeRef.current
@@ -24,17 +25,23 @@ export function useVisemeScheduler(): UseVisemeSchedulerResult {
     }
 
     if (queue.length > 0) {
-      rafRef.current = requestAnimationFrame(tick)
+      const fn = tickRef.current
+      if (fn) rafRef.current = requestAnimationFrame(fn)
     } else {
       setCurrentVisemeId(0)
     }
   }, [])
 
+  useEffect(() => {
+    tickRef.current = tick
+  }, [tick])
+
   const startPlayback = useCallback(() => {
     startTimeRef.current = Date.now()
     cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(tick)
-  }, [tick])
+    const fn = tickRef.current
+    if (fn) rafRef.current = requestAnimationFrame(fn)
+  }, [tickRef])
 
   const scheduleViseme = useCallback((id: number, offsetMs: number) => {
     queueRef.current.push({ visemeId: id, audioOffsetMs: offsetMs })

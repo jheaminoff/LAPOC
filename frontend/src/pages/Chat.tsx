@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useReducer } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ChatWindow from '@/components/ChatWindow'
 import ChatMascot from '@/components/ChatMascot'
@@ -15,7 +15,7 @@ export type Message = {
 }
 
 const GREETING =
-  "Hi — I'm your LA City planning and permits assistant. Ask me about a permit, an address, a case number, or how a process works. I'll adapt to whether you're a homeowner, developer, or contractor."
+  "Hi — I'm Rami, your LA City planning and permits assistant. Ask me about a permit, an address, a case number, or how a process works. I'll adapt to whether you're a homeowner, developer, or contractor."
 
 const PERSONA_LABELS: Record<string, string> = {
   resident: 'Homeowner / Resident',
@@ -40,6 +40,39 @@ const SUGGESTIONS: Suggestion[] = [
   { label: 'Conditional Use Permit', prompt: 'What\'s required to get a Conditional Use Permit for alcohol sales in LA?' },
 ]
 
+interface ChatResponse {
+  reply: string
+  speech_text?: string
+  detected_persona?: string
+  suggestions?: string[]
+}
+
+interface RandomCaseResponse {
+  case_id: string
+}
+
+type ConversationAction =
+  | { type: 'listening_started' }
+  | { type: 'listening_stopped' }
+  | { type: 'thinking' }
+  | { type: 'speaking' }
+  | { type: 'idle' }
+
+function conversationReducer(state: ConversationState, action: ConversationAction): ConversationState {
+  switch (action.type) {
+    case 'listening_started':
+      return state === 'idle' ? 'listening' : state
+    case 'listening_stopped':
+      return state !== 'idle' && state !== 'thinking' ? 'idle' : state
+    case 'thinking':
+      return 'thinking'
+    case 'speaking':
+      return 'speaking'
+    case 'idle':
+      return 'idle'
+  }
+}
+
 const FETCH_TIMEOUT_MS = 30_000
 
 export default function Chat() {
@@ -51,7 +84,8 @@ export default function Chat() {
   const [detectedPersona, setDetectedPersona] = useState<string | null>(null)
   const [serverError, setServerError] = useState<string | null>(null)
   const [hasUserMessage, setHasUserMessage] = useState(false)
-  const [conversationState, setConversationState] = useState<ConversationState>('idle')
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [conversationState, dispatchCS] = useReducer(conversationReducer, 'idle')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -78,24 +112,22 @@ export default function Chat() {
     token,
     region,
     language: 'en-US',
-    onResult: (text) => handleVoiceResult(text),
+    onResult: (text) => { void handleVoiceResult(text) },
   })
 
   // ── Speech credentials ───────────────────────────────────────────────────────
   const isSpeechReady = !!token && !!region
 
   // ── Conversation state sync ───────────────────────────────────────────────────
+  const prevListeningRef = useRef(isListening)
   useEffect(() => {
-    if (isListening && conversationState === 'idle') {
-      setConversationState('listening')
+    if (isListening && !prevListeningRef.current) {
+      dispatchCS({ type: 'listening_started' })
+    } else if (!isListening && prevListeningRef.current) {
+      dispatchCS({ type: 'listening_stopped' })
     }
-  }, [isListening, conversationState])
-
-  useEffect(() => {
-    if (!isListening && conversationState !== 'idle' && conversationState !== 'thinking') {
-      setConversationState('idle')
-    }
-  }, [isListening, conversationState])
+    prevListeningRef.current = isListening
+  }, [isListening])
 
   // ── Shared API call logic ─────────────────────────────────────────────────────
   const sendToApi = useCallback(async (next: Message[]) => {
@@ -103,7 +135,7 @@ export default function Chat() {
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     setLoading(true)
     setServerError(null)
-    setConversationState('thinking')
+    dispatchCS({ type: 'thinking' })
 
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/chat`, {
@@ -115,24 +147,26 @@ export default function Chat() {
 
       if (!res.ok) throw new Error(`Server responded with ${res.status}`)
 
-      const data = await res.json()
+      const data: ChatResponse = await res.json() as ChatResponse
       const reply = data.reply
+      const speechText = data.speech_text || reply
       setMessages([...next, { role: 'assistant', content: reply }])
 
       if (data.detected_persona && !detectedPersona) {
         setDetectedPersona(data.detected_persona)
       }
+      setSuggestions(data.suggestions ?? [])
 
-      setConversationState('speaking')
+      dispatchCS({ type: 'speaking' })
       startPlayback()
-      speak(reply)
+      speak(speechText)
     } catch (err) {
       const isTimeout = err instanceof DOMException && err.name === 'AbortError'
       const msg = isTimeout
         ? 'The request timed out after 30 seconds. The server may be busy — please try again.'
         : 'Sorry, I couldn\'t reach the server. Please check that the backend is running and try again.'
       setServerError(msg)
-      setConversationState('listening')
+      dispatchCS({ type: 'idle' })
     } finally {
       clearTimeout(timer)
       setLoading(false)
@@ -169,6 +203,7 @@ export default function Chat() {
     }
 
     setServerError(null)
+    setSuggestions([])
     const userMsg: Message = { role: 'user', content: text }
     const next = [...messages, userMsg]
     setMessages(next)
@@ -182,7 +217,7 @@ export default function Chat() {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL}/cases/random`)
         if (res.ok) {
-          const data = await res.json()
+          const data: RandomCaseResponse = await res.json() as RandomCaseResponse
           const prompt = `Can you check the status of case ${data.case_id}?`
           await sendMessage(prompt)
           return
@@ -226,7 +261,7 @@ export default function Chat() {
   const handleStopTTS = useCallback(() => {
     stopSpeaking()
     clearQueue()
-    setConversationState('listening')
+    dispatchCS({ type: 'idle' })
   }, [stopSpeaking, clearQueue])
 
   return (
@@ -275,7 +310,7 @@ export default function Chat() {
                   <button
                     key={s.label}
                     className={styles.chip}
-                    onClick={() => handleSuggestionClick(s)}
+                    onClick={() => { void handleSuggestionClick(s) }}
                     disabled={loading}
                   >
                     {s.label}
@@ -289,7 +324,8 @@ export default function Chat() {
         <ChatWindow
           messages={messages}
           loading={loading}
-          onSend={sendMessage}
+          suggestions={suggestions}
+          onSend={(text: string) => { void sendMessage(text) }}
           isSpeechReady={isSpeechReady}
           isListening={isListening}
           isMuted={isMuted}

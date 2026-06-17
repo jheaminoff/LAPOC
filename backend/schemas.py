@@ -1,6 +1,7 @@
 """Pydantic schemas for request/response validation."""
 
 from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -46,22 +47,30 @@ class WorkflowStepOut(BaseModel):
     description: Optional[str] = None
     responsible_party: Optional[str] = None
     typical_days: Optional[str] = None
-    guidance: Optional[str] = None         # persona-specific note (joined from workflow_personas)
+    guidance: Optional[str] = (
+        None  # persona-specific note (joined from workflow_personas)
+    )
 
     model_config = {"from_attributes": True}
 
 
 class ChatMessage(BaseModel):
-    role: str       # "user" | "assistant"
+    role: str  # "user" | "assistant"
     content: str
 
 
 class ChatRequest(BaseModel):
-    persona: str = "auto"   # "resident" | "developer" | "contractor" | "auto" (detected from conversation)
+    persona: str = (
+        "auto"  # "resident" | "developer" | "contractor" | "auto" (detected from conversation)
+    )
     messages: list[ChatMessage]
 
 
 class ChatResponse(BaseModel):
     reply: str
+    speech_text: str = ""  # condensed 2-sentence max version of reply for TTS
     tool_calls_made: list[str] = []
-    detected_persona: Optional[str] = None  # returned when agent resolves persona from "auto"
+    detected_persona: Optional[str] = (
+        None  # returned when agent resolves persona from "auto"
+    )
+    suggestions: list[str] = []  # likely next questions after first query

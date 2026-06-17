@@ -2,12 +2,11 @@
 
 import random
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException
 from models import Case
 from schemas import CaseOut
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 

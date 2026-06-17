@@ -1,11 +1,10 @@
 """Plots router — look up a parcel by APN or address."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
 from database import get_db
-from models import Plot, Case
+from fastapi import APIRouter, Depends, HTTPException
+from models import Case, Plot
 from schemas import ParcelResult
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/plots", tags=["plots"])
 

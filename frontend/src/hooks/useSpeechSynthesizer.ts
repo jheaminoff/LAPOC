@@ -12,8 +12,6 @@ const VOICE_MAP: Record<string, string> = {
   'en-US': 'en-US-JennyNeural',
 }
 
-const WAV_MIME = 'audio/wav; codecs="1"'
-
 interface UseSpeechSynthesizerResult {
   speak: (text: string) => void
   isSpeaking: boolean
@@ -30,7 +28,6 @@ export function useSpeechSynthesizer({
   const [isSpeaking, setIsSpeaking] = useState(false)
   const synthRef = useRef<SpeechSDK.SpeechSynthesizer | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const mediaSourceRef = useRef<MediaSource | null>(null)
   const blobUrlRef = useRef<string | null>(null)
 
   const resumeAudio = useCallback(() => {
@@ -50,7 +47,8 @@ export function useSpeechSynthesizer({
 
     const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region)
     speechConfig.speechSynthesisVoiceName = VOICE_MAP[language] ?? VOICE_MAP['en-US']
-    speechConfig.speechSynthesisOutputFormat = SpeechSDK.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm
+    // MP3 output: universally supported by all browsers (no MSE/WAV needed)
+    speechConfig.speechSynthesisOutputFormat = SpeechSDK.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
 
     const nullStream = SpeechSDK.AudioOutputStream.createPullStream()
     const audioConfig = SpeechSDK.AudioConfig.fromStreamOutput(nullStream)
@@ -71,84 +69,44 @@ export function useSpeechSynthesizer({
     synthRef.current = synth
     setIsSpeaking(true)
 
-    // ── MediaSource streaming setup ──
-    const chunks: ArrayBuffer[] = []
-    const mediaSource = new MediaSource()
-    mediaSourceRef.current = mediaSource
-    let sourceBuffer: SourceBuffer | null = null
-    let appendQueue: ArrayBuffer[] = []
-    let isAppending = false
-
-    const tryAppend = () => {
-      if (!sourceBuffer || isAppending || appendQueue.length === 0) return
-      isAppending = true
-      const chunk = appendQueue.shift()!
-      try {
-        sourceBuffer.appendBuffer(chunk)
-      } catch (e) {
-        console.error('[TTS] SourceBuffer.appendBuffer error:', e)
-        isAppending = false
-      }
-    }
-
-    mediaSource.onsourceopen = () => {
-      try {
-        sourceBuffer = mediaSource.addSourceBuffer(WAV_MIME)
-        sourceBuffer.onupdateend = () => {
-          isAppending = false
-          tryAppend()
-        }
-        tryAppend()
-      } catch (e) {
-        console.error('[TTS] addSourceBuffer error:', e)
-        // Fallback: play chunks after full synthesis
-        mediaSourceRef.current = null
-      }
-    }
-
-    const audioUrl = URL.createObjectURL(mediaSource)
-    if (blobUrlRef.current) {
-      URL.revokeObjectURL(blobUrlRef.current)
-    }
-    blobUrlRef.current = audioUrl
-
     if (!audioRef.current) {
       audioRef.current = new Audio()
     }
     const audio = audioRef.current
-    audio.src = audioUrl
-    audio.onended = () => {
-      setIsSpeaking(false)
-    }
-    audio.onerror = () => {
-      console.warn('[TTS] Audio playback error — trying fallback')
-      setIsSpeaking(false)
-    }
-    audio.play().catch((err) => {
-      console.warn('[TTS] Audio play failed:', err)
-      setIsSpeaking(false)
-    })
 
-    // ── Stream chunks via synthesizing event ──
+    // Collect MP3 chunks during synthesis
+    const chunks: ArrayBuffer[] = []
+
     synth.synthesizing = (_s, e) => {
       const data = e.result.audioData
-      if (!data?.byteLength) return
-      const copy = data.slice(0)
-      chunks.push(copy)
-      appendQueue.push(copy)
-      if (mediaSource.readyState === 'open') {
-        tryAppend()
-      }
+      if (data?.byteLength) chunks.push(data.slice(0))
     }
 
     synth.synthesisCompleted = () => {
-      if (mediaSource.readyState === 'open') {
-        try {
-          mediaSource.endOfStream()
-        } catch {
-          // already ended
-        }
+      if (chunks.length === 0) {
+        setIsSpeaking(false)
+        return
       }
+
+      // Revoke previous blob URL before creating a new one
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current)
+      }
+
+      const blob = new Blob(chunks, { type: 'audio/mpeg' })
+      const url = URL.createObjectURL(blob)
+      blobUrlRef.current = url
+
+      audio.src = url
+      audio.onended = () => setIsSpeaking(false)
+      audio.onerror = () => {
+        console.warn('[TTS] Audio playback error')
+        setIsSpeaking(false)
+      }
+      audio.play().catch((err) => {
+        console.warn('[TTS] Audio play failed:', err)
+        setIsSpeaking(false)
+      })
     }
 
     // ── Kick off synthesis ──
@@ -163,34 +121,15 @@ export function useSpeechSynthesizer({
 
     synth.speakSsmlAsync(
       ssml,
-      (_result) => {
+      () => {
         synth.close()
         synthRef.current = null
-        // Ensure stream ended even if synthesisCompleted missed
-        if (mediaSourceRef.current?.readyState === 'open') {
-          try {
-            mediaSourceRef.current.endOfStream()
-          } catch {
-            // already ended
-          }
-        }
-        // Fallback: if MediaSource didn't work, try non-streaming
-        if (audio.paused && chunks.length > 0) {
-          setIsSpeaking(false)
-        }
       },
       (err) => {
         console.error('[TTS] speakSsmlAsync error:', err)
         setIsSpeaking(false)
         synth.close()
         synthRef.current = null
-        if (mediaSourceRef.current?.readyState === 'open') {
-          try {
-            mediaSourceRef.current.endOfStream('network')
-          } catch {
-            // already ended
-          }
-        }
       },
     )
   }, [buildSynthesizer, language])

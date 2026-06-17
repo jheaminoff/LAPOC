@@ -9,6 +9,7 @@ import styles from './ChatWindow.module.css'
 type Props = {
   messages: Message[]
   loading: boolean
+  suggestions: string[]
   onSend: (text: string) => void
   isSpeechReady?: boolean
   isListening?: boolean
@@ -97,7 +98,7 @@ function renderContent(text: string) {
     }
 
     // Bullet lines: "- text", "• text" — strip the marker before rendering
-    const bulletMatch = trimmed.match(/^[•\-]\s+(.*)$/)
+    const bulletMatch = trimmed.match(/^[•-]\s+(.*)$/)
     if (bulletMatch) {
       return (
         <li key={i} className={styles.bullet} style={{ paddingLeft: indent ? `${indent * 0.55}em` : undefined }}>
@@ -137,6 +138,7 @@ function AssistantContent({ content }: { content: string }) {
 export default function ChatWindow({
   messages,
   loading,
+  suggestions,
   onSend,
   isSpeechReady,
   isListening,
@@ -196,6 +198,24 @@ export default function ChatWindow({
           </div>
         ))}
 
+        {suggestions.length > 0 && messages.filter(m => m.role === 'user').length > 0 && (
+          <div className={styles.suggestions}>
+            <p className={styles.suggestionsLabel}>Try asking next…</p>
+            <div className={styles.chips}>
+              {suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  className={styles.chip}
+                  onClick={() => onSend(s)}
+                  disabled={loading}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {loading && (
           <div className={`${styles.bubble} ${styles.assistant}`}>
             <span className={styles.avatar}>LA</span>
@@ -208,66 +228,104 @@ export default function ChatWindow({
         )}
       </div>
 
-      <div className={styles.inputRow}>
+      {/* Voice-forward input area */}
+      <div className={styles.voiceInputArea}>
         {isSpeechReady && (
-          <button
-            className={`${styles.micBtn} ${
-              isConnecting ? styles.micConnecting :
-              isListening && !isMuted ? styles.micListening :
-              isMuted ? styles.micMuted :
-              styles.micIdle
-            }`}
-            onClick={onMuteToggle}
-            disabled={isConnecting || loading}
-            title={
-              isConnecting ? 'Connecting…' :
-              isMuted ? 'Microphone muted — tap to unmute' :
-              isListening ? 'Listening — tap to mute' :
-              'Click to start microphone'
-            }
-          >
-            {isConnecting ? (
-              <span className={styles.micSpinner} />
-            ) : isMuted ? (
-              <span className={styles.micIcon}>🔇</span>
-            ) : (
-              <span className={styles.micIcon}>🎤</span>
+          <>
+            <button
+              className={`${styles.micBtnLarge} ${
+                isConnecting    ? styles.micConnectingLarge :
+                isSpeaking      ? styles.micSpeakingLarge :
+                isListening && !isMuted ? styles.micListeningLarge :
+                isMuted         ? styles.micMutedLarge :
+                styles.micIdleLarge
+              }`}
+              onClick={onMuteToggle}
+              disabled={isConnecting || loading}
+              aria-label={
+                isConnecting ? 'Connecting to microphone' :
+                isMuted      ? 'Microphone muted — tap to unmute' :
+                isListening  ? 'Listening — tap to mute' :
+                isSpeaking   ? 'Assistant is speaking' :
+                'Tap to speak'
+              }
+              aria-pressed={isListening && !isMuted}
+            >
+              {isConnecting ? (
+                <span className={styles.micSpinner} />
+              ) : (
+                <span className={styles.micIconLarge}>
+                  {isMuted ? (
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M19 11a7 7 0 0 1-.16 1.45l-1.55-1.55A5 5 0 0 0 17 11h-2a3 3 0 0 1-3 3v-.17L10.17 12H10a3 3 0 0 1-3-3V7.83L4.27 5.1A9.9 9.9 0 0 0 3 11H1a11 11 0 0 1 2.11-6.47L1.39 2.81 2.8 1.4l19.8 19.8-1.41 1.41L19 20.59V19h-7v2H9v-2H5v-2h14v2l.16-.16L19 11zM7 11V9.83L5.16 8A5 5 0 0 0 5 9a5 5 0 0 0 5 5v-1.17l-2.83-2.83H7zm5-9a3 3 0 0 1 3 3v4.17l1.45 1.45A5 5 0 0 0 17 9V8a5 5 0 0 0-5-5z"/>
+                    </svg>
+                  ) : isSpeaking ? (
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                  )}
+                </span>
+              )}
+              {isListening && !isMuted && <span className={styles.micRing} />}
+              {isSpeaking && <span className={styles.micRingSpeaking} />}
+            </button>
+
+            <span className={`${styles.micLabel} ${
+              isConnecting    ? styles.micLabelConnecting :
+              isSpeaking      ? styles.micLabelSpeaking :
+              isListening && !isMuted ? styles.micLabelListening :
+              isMuted         ? styles.micLabelMuted :
+              ''
+            }`}>
+              {isConnecting    ? 'Connecting…' :
+               isSpeaking      ? 'Speaking…' :
+               isListening && !isMuted ? 'Listening…' :
+               isMuted         ? 'Microphone muted' :
+               'Tap to speak'}
+            </span>
+
+            {isSpeaking && (
+              <button className={styles.stopBtn} onClick={onStopTTS} aria-label="Stop speaking">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                  <rect width="12" height="12" rx="2"/>
+                </svg>
+                Stop
+              </button>
             )}
-            {isListening && !isMuted && <span className={styles.micPulse} />}
-          </button>
+          </>
         )}
-        <textarea
-          ref={textareaRef}
-          className={styles.input}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask about a permit, address, or planning case…"
-          rows={1}
-          disabled={loading}
-        />
-        {isSpeaking && (
+
+        {/* Text input row */}
+        <div className={styles.textRow}>
+          <textarea
+            ref={textareaRef}
+            className={styles.input}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Or type your question…"
+            rows={1}
+            disabled={loading}
+          />
           <button
-            className={styles.stopBtn}
-            onClick={onStopTTS}
-            aria-label="Stop speaking"
+            className={styles.sendBtn}
+            onClick={handleSend}
+            disabled={loading || !input.trim()}
+            aria-label="Send message"
           >
-            ■
+            ↑
           </button>
+        </div>
+
+        {isConnecting && (
+          <p className={styles.speechHint}>Connecting to speech service…</p>
         )}
-        <button
-          className={styles.sendBtn}
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-          aria-label="Send message"
-        >
-          ↑
-        </button>
+        <p className={styles.hint}>Press Enter to send · Shift+Enter for new line</p>
       </div>
-      {isConnecting && (
-        <p className={styles.speechHint}>Connecting to speech service…</p>
-      )}
-      <p className={styles.hint}>Press Enter to send · Shift+Enter for new line</p>
     </div>
   )
 }

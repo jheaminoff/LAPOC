@@ -1,4 +1,4 @@
-import { Suspense, useRef, Component, type ReactNode, type ErrorInfo } from 'react'
+import { Suspense, useRef, useEffect, Component, type ReactNode, type ErrorInfo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF, ContactShadows, Environment } from '@react-three/drei'
 import * as THREE from 'three'
@@ -15,9 +15,8 @@ function GlbModel({ visemeId, state }: ChatMascotProps) {
   const group = useRef<THREE.Group>(null)
   const jawBoneRef = useRef<THREE.Bone | null>(null)
   const { scene } = useGLTF(modelUrl)
-  const foundBones = useRef(false)
 
-  if (!foundBones.current) {
+  useEffect(() => {
     scene.traverse((obj) => {
       if (obj instanceof THREE.Bone && !jawBoneRef.current) {
         const n = obj.name.toLowerCase()
@@ -26,8 +25,7 @@ function GlbModel({ visemeId, state }: ChatMascotProps) {
         }
       }
     })
-    foundBones.current = true
-  }
+  }, [scene])
 
   useFrame((_, delta) => {
     if (!group.current) return

@@ -1,13 +1,12 @@
 """Agent tool functions — each wraps DB queries and returns plain-text summaries."""
 
+from models import Case, Plot, WorkflowPersona, WorkflowStep
 from sqlalchemy.orm import Session
-
-from models import Plot, Case, WorkflowStep, WorkflowPersona
-
 
 # --------------------------------------------------------------------------- #
 # Tool 1: lookup_parcel
 # --------------------------------------------------------------------------- #
+
 
 def lookup_parcel(apn_or_address: str, db: Session) -> str:
     """
@@ -17,9 +16,12 @@ def lookup_parcel(apn_or_address: str, db: Session) -> str:
     plot = db.query(Plot).filter(Plot.apn == apn_or_address).first()
 
     if not plot:
-        plots = db.query(Plot).filter(
-            Plot.address.ilike(f"%{apn_or_address}%")
-        ).limit(5).all()
+        plots = (
+            db.query(Plot)
+            .filter(Plot.address.ilike(f"%{apn_or_address}%"))
+            .limit(5)
+            .all()
+        )
         if not plots:
             return f"No parcel found matching '{apn_or_address}'."
         if len(plots) > 1:
@@ -37,7 +39,11 @@ def lookup_parcel(apn_or_address: str, db: Session) -> str:
         f"  APN: {plot.apn}",
         f"  Neighborhood: {plot.neighborhood}",
         f"  Zoning: {plot.zoning}",
-        f"  Lot size: {plot.lot_size_sqft:,} sq ft" if plot.lot_size_sqft else "  Lot size: unknown",
+        (
+            f"  Lot size: {plot.lot_size_sqft:,} sq ft"
+            if plot.lot_size_sqft
+            else "  Lot size: unknown"
+        ),
         f"  Current use: {plot.current_use}",
         "",
         f"CASES ({len(cases)} total):",
@@ -62,6 +68,7 @@ def lookup_parcel(apn_or_address: str, db: Session) -> str:
 # Tool 2: get_case_detail
 # --------------------------------------------------------------------------- #
 
+
 def get_case_detail(case_id: str, db: Session) -> str:
     """
     Return full details for a single case: status, next action, fees, hearing date,
@@ -80,8 +87,16 @@ def get_case_detail(case_id: str, db: Session) -> str:
         f"  Submitted:     {case.submitted_date}",
         f"  Status:        {case.current_status}",
         f"  Assigned to:   {case.assigned_to or 'Not yet assigned'}",
-        f"  Fees paid:     ${case.fees_paid:,.0f}" if case.fees_paid else "  Fees paid:     $0",
-        f"  Fees owed:     ${case.fees_outstanding:,.0f}" if case.fees_outstanding else "  Fees owed:     $0",
+        (
+            f"  Fees paid:     ${case.fees_paid:,.0f}"
+            if case.fees_paid
+            else "  Fees paid:     $0"
+        ),
+        (
+            f"  Fees owed:     ${case.fees_outstanding:,.0f}"
+            if case.fees_outstanding
+            else "  Fees owed:     $0"
+        ),
     ]
 
     if case.hearing_date:
@@ -98,6 +113,7 @@ def get_case_detail(case_id: str, db: Session) -> str:
 # --------------------------------------------------------------------------- #
 # Tool 3: get_workflow
 # --------------------------------------------------------------------------- #
+
 
 def get_workflow(process_type: str, persona: str, db: Session) -> str:
     """
@@ -144,7 +160,9 @@ def get_workflow(process_type: str, persona: str, db: Session) -> str:
     for step in steps:
         party_tag = f"[{step.responsible_party}]" if step.responsible_party else ""
         days_tag = f"  ~{step.typical_days} days" if step.typical_days else ""
-        lines.append(f"  Step {step.step_order}. {step.step_name} {party_tag}{days_tag}")
+        lines.append(
+            f"  Step {step.step_order}. {step.step_name} {party_tag}{days_tag}"
+        )
         if step.description:
             lines.append(f"    {step.description}")
         guidance = guidance_map.get(step.step_name)

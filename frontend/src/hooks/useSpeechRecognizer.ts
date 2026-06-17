@@ -43,6 +43,8 @@ export function useSpeechRecognizer({
     }
   }, [])
 
+  const buildAndStartRef = useRef<(() => void) | null>(null)
+
   const buildAndStart = useCallback(() => {
     if (!token || !region) {
       console.warn('[STT] Aborting — missing token or region')
@@ -67,7 +69,7 @@ export function useSpeechRecognizer({
       setIsListening(false)
       // Auto-retry once
       activeRef.current = true
-      buildAndStart()
+      buildAndStartRef.current?.()
     }, CONNECT_TIMEOUT_MS)
 
     const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region)
@@ -125,6 +127,10 @@ export function useSpeechRecognizer({
       }
     )
   }, [token, region, language, onResult, clearConnectTimeout])
+
+  useEffect(() => {
+    buildAndStartRef.current = buildAndStart
+  }, [buildAndStart])
 
   const startListening = useCallback(() => {
     if (activeRef.current) {
