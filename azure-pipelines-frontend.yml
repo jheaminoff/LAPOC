@@ -6,15 +6,11 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-variables:
-  azureSubscription: 'tre-sc-ai-tech-lab'
-  staticWebAppName: 'tre-swa-lapoc'
-
 steps:
   - task: NodeTool@0
     inputs:
       versionSpec: '20.x'
-      displayName: 'Install Node.js'
+    displayName: 'Install Node.js'
 
   - script: |
       cd frontend
