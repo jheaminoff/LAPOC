@@ -14,9 +14,7 @@ interface UseSpeechRecognizerResult {
   isListening: boolean
   isConnecting: boolean
   isMuted: boolean
-  interimTranscript: string
   startListening: () => void
-  stopListening: () => void
   mute: () => void
   unmute: () => void
 }
@@ -30,7 +28,6 @@ export function useSpeechRecognizer({
   const [isListening, setIsListening] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
-  const [interimTranscript, setInterimTranscript] = useState('')
   const recognizerRef = useRef<SpeechSDK.SpeechRecognizer | null>(null)
   const activeRef = useRef(false)
   const mutedRef = useRef(false)
@@ -78,13 +75,11 @@ export function useSpeechRecognizer({
     const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig)
     recognizerRef.current = recognizer
 
-    recognizer.recognizing = (_s, e) => {
+    recognizer.recognizing = (_s, _e) => {
       if (mutedRef.current) return
-      setInterimTranscript(e.result.text)
     }
 
     recognizer.recognized = (_s, e) => {
-      setInterimTranscript('')
       if (mutedRef.current) return
       if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text.trim()) {
         onResult(e.result.text)
@@ -141,27 +136,9 @@ export function useSpeechRecognizer({
     buildAndStart()
   }, [buildAndStart])
 
-  const stopListening = useCallback(() => {
-    activeRef.current = false
-    mutedRef.current = false
-    setIsMuted(false)
-    clearConnectTimeout()
-    const rec = recognizerRef.current
-    if (!rec) return
-    rec.stopContinuousRecognitionAsync(
-      () => {
-        setIsListening(false)
-        rec.close()
-        recognizerRef.current = null
-      },
-      (err) => console.error('[STT] stop error:', err)
-    )
-  }, [clearConnectTimeout])
-
   const mute = useCallback(() => {
     mutedRef.current = true
     setIsMuted(true)
-    setInterimTranscript('')
   }, [])
 
   const unmute = useCallback(() => {
@@ -177,5 +154,5 @@ export function useSpeechRecognizer({
     }
   }, [clearConnectTimeout])
 
-  return { isListening, isConnecting, isMuted, interimTranscript, startListening, stopListening, mute, unmute }
+  return { isListening, isConnecting, isMuted, startListening, mute, unmute }
 }

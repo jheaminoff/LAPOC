@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models."""
 
 from database import Base
-from sqlalchemy import Column, Date, Float, ForeignKey, Integer, Text
+from sqlalchemy import Column, Float, ForeignKey, Integer, Text
 from sqlalchemy.orm import relationship
 
 

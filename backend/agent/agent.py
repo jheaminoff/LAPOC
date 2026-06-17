@@ -308,8 +308,6 @@ async def generate_speech_keynotes(reply: str) -> str:
         pass
 
     # Fallback: strip card blocks and markdown, return first two sentences
-    import re as _re
-
     _CARD_SENTINELS = ("PARCEL:", "CASE DETAIL:", "WORKFLOW:", "MAP:", "ADU ELIGIBILITY CHECK:")
     lines = reply.splitlines()
     clean: list[str] = []

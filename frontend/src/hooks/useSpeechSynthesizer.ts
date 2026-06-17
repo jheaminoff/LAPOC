@@ -16,7 +16,6 @@ const VOICE_MAP: Record<string, string> = {
 
 interface UseSpeechSynthesizerResult {
   speak: (text: string) => Promise<void>
-  playUrl: (url: string) => void
   isSynthesizing: boolean
   isSpeaking: boolean
   stop: () => void
@@ -181,24 +180,6 @@ export function useSpeechSynthesizer({
     )
   }, [buildSynthesizer, language, onSynthesized, playChunks])
 
-  const playUrl = useCallback((url: string) => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio()
-    }
-    const audio = audioRef.current
-    audio.src = url
-    audio.onended = () => setIsSpeaking(false)
-    audio.onerror = () => {
-      console.warn('[TTS] URL playback error')
-      setIsSpeaking(false)
-    }
-    setIsSpeaking(true)
-    audio.play().catch((err) => {
-      console.warn('[TTS] URL play failed:', err)
-      setIsSpeaking(false)
-    })
-  }, [])
-
   const stop = useCallback(() => {
     const synth = synthRef.current
     synthRef.current = null
@@ -251,5 +232,5 @@ export function useSpeechSynthesizer({
     }
   }, [])
 
-  return { speak, playUrl, isSynthesizing, isSpeaking, stop, resumeAudio }
+  return { speak, isSynthesizing, isSpeaking, stop, resumeAudio }
 }
