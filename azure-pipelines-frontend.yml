@@ -18,9 +18,9 @@ steps:
       npm run build
     displayName: 'Build frontend'
 
-  - task: AzureStaticWebApp@0
-    inputs:
-      azure_static_web_apps_api_token: '$(swa_deployment_token)'
-      app_location: 'frontend/dist'
-      skip_app_build: true
-      skip_api_build: true
+  - script: |
+      npm install -g @azure/static-web-apps-cli
+      swa deploy ./frontend/dist --deployment-token $SWA_TOKEN --env production
+    displayName: 'Deploy to Azure Static Web Apps'
+    env:
+      SWA_TOKEN: $(swa_deployment_token)
