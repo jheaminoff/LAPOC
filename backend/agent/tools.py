@@ -1,5 +1,6 @@
 """Agent tool functions — each wraps DB queries and returns plain-text summaries."""
 
+import httpx
 from models import Case, Plot, WorkflowPersona, WorkflowStep
 from sqlalchemy.orm import Session
 
@@ -27,7 +28,7 @@ def lookup_parcel(apn_or_address: str, db: Session) -> str:
         if len(plots) > 1:
             lines = [f"Multiple parcels matched '{apn_or_address}':"]
             for p in plots:
-                lines.append(f"  • APN {p.apn} — {p.address}")
+                lines.append(f"  \u2022 APN {p.apn} \u2014 {p.address}")
             lines.append("Please specify the APN to continue.")
             return "\n".join(lines)
         plot = plots[0]
@@ -55,7 +56,7 @@ def lookup_parcel(apn_or_address: str, db: Session) -> str:
         for c in cases:
             fee_note = ""
             if c.fees_outstanding and c.fees_outstanding > 0:
-                fee_note = f" | ⚠ ${c.fees_outstanding:,.0f} outstanding"
+                fee_note = f" | \u26a0 ${c.fees_outstanding:,.0f} outstanding"
             lines.append(
                 f"  [{c.department}] {c.case_id}  |  {c.process_type}  "
                 f"|  Status: {c.current_status}{fee_note}"
@@ -167,7 +168,159 @@ def get_workflow(process_type: str, persona: str, db: Session) -> str:
             lines.append(f"    {step.description}")
         guidance = guidance_map.get(step.step_name)
         if guidance:
-            lines.append(f"    💡 {guidance}")
+            lines.append(f"    \U0001f4a1 {guidance}")
         lines.append("")
 
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# Tool 4: lookup_address  (LA City BOE GeoQuery API)
+# --------------------------------------------------------------------------- #
+
+_BOE_API_URL = "https://api.lacity.org/boe_geoquery/addressvalidationservice"
+_BOE_API_KEY = "B5thBZ3BXlR1waoUvderfnrMETLwk2SE"
+
+
+def lookup_address(address: str) -> str:
+    """
+    Look up an address via the LA City BOE GeoQuery API.
+    Returns standardized address, APN, council district, planning area,
+    police/fire/school jurisdictions, and LADBS links.
+    """
+    params = {
+        "address": address,
+        "status": "new",
+        "layerset": "neighborhoodinfo",
+        "apikey": _BOE_API_KEY,
+    }
+
+    try:
+        response = httpx.get(_BOE_API_URL, params=params, timeout=15.0)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        return f"Address lookup failed: {e}"
+
+    if data.get("status") != "exactMatch":
+        return (
+            f"Address '{address}' could not be matched. "
+            "Try a more complete address (e.g., '1220 S Crenshaw Blvd, Los Angeles')."
+        )
+
+    loc = data.get("location", {})
+    coords = data.get("coords", {})
+    layers = data.get("layers", {})
+
+    lines = []
+
+    # -- Standardized address + APN --
+    lines.append(f"  Address:        {loc.get('address', 'N/A')}")
+    lines.append(f"  APN:            {_fmt_apn(loc)}")
+    lines.append(f"  ZIP:            {loc.get('zipcode', 'N/A')}")
+    lat = coords.get("latitude")
+    lng = coords.get("longitude")
+    if lat and lng:
+        lines.append(f"  Coordinates:    {lat}, {lng}")
+    lines.append("")
+
+    # -- Jurisdictional info --
+    cd = layers.get("council districts", {})
+    if cd:
+        lines.append(
+            f"  Council District:  {cd.get('cd_no', 'N/A')}"
+            f"  \u2014 {cd.get('cdmember', 'N/A')}"
+        )
+
+    apc = layers.get("area planning commission", {})
+    if apc:
+        lines.append(f"  Area Planning:     {apc.get('apc', 'N/A')}")
+
+    police = layers.get("police division", {})
+    if police:
+        lines.append(
+            f"  Police Division:   {police.get('aprec', 'N/A')}"
+            f"  ({police.get('bureau', 'N/A')})"
+        )
+
+    nc = layers.get("neighborhood council", {})
+    if nc:
+        lines.append(f"  Neighborhood Cncl: {nc.get('name', 'N/A')}")
+
+    planning = layers.get("community planning area", {})
+    if planning:
+        lines.append(f"  Planning Area:     {planning.get('name', 'N/A')}")
+
+    fire = layers.get("fire jurisdiction", {})
+    if fire:
+        lines.append(f"  Fire Station:      Station {fire.get('firstin_di', 'N/A')}")
+
+    lausd = layers.get("lausd cluster", {})
+    if lausd:
+        lines.append(f"  LAUSD Cluster:     {lausd.get('clustername', 'N/A')}")
+
+    county = layers.get("county supervisor", {})
+    if county:
+        lines.append(
+            f"  County Supervisor: District {county.get('dist_', 'N/A')}"
+            f"  \u2014 {county.get('who', 'N/A')}"
+        )
+
+    state_sen = layers.get("state senate", {})
+    if state_sen:
+        lines.append(
+            f"  State Senate:      District {state_sen.get('dist_', 'N/A')}"
+            f"  \u2014 {state_sen.get('name', 'N/A')}"
+        )
+
+    state_asm = layers.get("state assembly", {})
+    if state_asm:
+        lines.append(
+            f"  State Assembly:    District {state_asm.get('dist_', 'N/A')}"
+            f"  \u2014 {state_asm.get('name', 'N/A')}"
+        )
+
+    congress = layers.get("us congress", {})
+    if congress:
+        lines.append(
+            f"  US Congress:       District {congress.get('dist_', 'N/A')}"
+            f"  \u2014 {congress.get('name', 'N/A')}"
+        )
+
+    lines.append("")
+
+    # -- LADBS links --
+    ladbs = layers.get("ladbs", {})
+    if ladbs:
+        lines.append("  LADBS Links:")
+        if ladbs.get("permit_url"):
+            lines.append(f"    Permits:  {ladbs['permit_url']}")
+        if ladbs.get("code_enforcement_url"):
+            lines.append(f"    Code Enf: {ladbs['code_enforcement_url']}")
+        lines.append("")
+
+    lines.append("")
+
+    # -- Map coordinates (rendered as map card on frontend) --
+    if lat and lng:
+        lines.append("MAP:")
+        lines.append(f"  latitude: {lat}")
+        lines.append(f"  longitude: {lng}")
+
+    lines.append(
+        "Tip: use the APN above to look up parcel details and associated cases."
+    )
+
+    return "\n".join(lines)
+
+
+def _fmt_apn(loc: dict) -> str:
+    """Extract and format the APN from location data (10-digit \u2192 XXXX-XXX-XXX)."""
+    apn_values = loc.get("apn_values", {})
+    apn = apn_values.get("apn")
+    if apn:
+        s = str(apn)
+        if len(s) == 10:
+            return f"{s[:4]}-{s[4:7]}-{s[7:]}"
+        return s
+    return "N/A"

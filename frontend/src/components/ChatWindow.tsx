@@ -4,6 +4,7 @@ import CaseStatusBadge from './CaseStatusBadge'
 import WorkflowTimeline, { parseWorkflowText } from './WorkflowTimeline'
 import ParcelCard, { parseParcelText } from './ParcelCard'
 import CaseDetailCard, { parseCaseDetailText } from './CaseDetailCard'
+import MapCard, { parseMapText } from './MapCard'
 import styles from './ChatWindow.module.css'
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
   isSpeaking?: boolean
   onMuteToggle?: () => void
   onStopTTS?: () => void
+  onReplaySpeech?: (text: string) => void
 }
 
 const URL_RE = /(https?:\/\/[^\s)>\],"']+)/g
@@ -57,7 +59,7 @@ function applyInline(line: string): React.ReactNode[] {
  * The blocks (PARCEL:, CASE DETAIL:, WORKFLOW:) are rendered as visual cards —
  * we don't also want them in the plain-text bubble.
  */
-const SENTINEL_RE = /^(PARCEL:|CASE DETAIL:|WORKFLOW:)/
+const SENTINEL_RE = /^(PARCEL:|CASE DETAIL:|WORKFLOW:|MAP:)/
 
 function stripStructuredBlocks(text: string): string {
   const lines = text.split('\n')
@@ -118,19 +120,37 @@ function useCardData(content: string) {
   const workflow = useMemo(() => parseWorkflowText(content), [content])
   const parcel = useMemo(() => parseParcelText(content), [content])
   const caseDetail = useMemo(() => parseCaseDetailText(content), [content])
-  return { workflow, parcel, caseDetail }
+  const mapData = useMemo(() => parseMapText(content), [content])
+  return { workflow, parcel, caseDetail, mapData }
 }
 
-function AssistantContent({ content }: { content: string }) {
-  const { workflow, parcel, caseDetail } = useCardData(content)
+function AssistantContent({ content, speechText, onReplaySpeech }: {
+  content: string
+  speechText?: string
+  onReplaySpeech?: (text: string) => void
+}) {
+  const { workflow, parcel, caseDetail, mapData } = useCardData(content)
   return (
     <div className={styles.content}>
       <div className={styles.text}>{renderContent(content)}</div>
       {parcel && <ParcelCard data={parcel} />}
       {caseDetail && <CaseDetailCard data={caseDetail} />}
       {workflow && <WorkflowTimeline data={workflow} />}
+      {mapData && <MapCard data={mapData} />}
       {/* Suppress inline status badge when CaseDetailCard is already showing status */}
       {!caseDetail && <CaseStatusBadge content={content} />}
+      {speechText && onReplaySpeech && (
+        <button
+          className={styles.replayBtn}
+          onClick={() => onReplaySpeech(speechText)}
+          aria-label="Replay voice response"
+          title="Replay voice response"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+          </svg>
+        </button>
+      )}
     </div>
   )
 }
@@ -147,6 +167,7 @@ export default function ChatWindow({
   isSpeaking,
   onMuteToggle,
   onStopTTS,
+  onReplaySpeech,
 }: Props) {
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -189,7 +210,7 @@ export default function ChatWindow({
               <span className={styles.avatar}>LA</span>
             )}
             {msg.role === 'assistant' ? (
-              <AssistantContent content={msg.content} />
+              <AssistantContent content={msg.content} speechText={msg.speechText} onReplaySpeech={onReplaySpeech} />
             ) : (
               <div className={styles.content}>
                 <div className={styles.text}>{renderContent(msg.content)}</div>
