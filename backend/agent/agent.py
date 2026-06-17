@@ -5,7 +5,13 @@ import os
 import re
 from typing import Any
 
-from agent.tools import get_case_detail, get_workflow, lookup_address, lookup_parcel
+from agent.tools import (
+    check_adu_eligibility,
+    get_case_detail,
+    get_workflow,
+    lookup_address,
+    lookup_parcel,
+)
 from jinja2 import Environment, FileSystemLoader
 from openai import AsyncAzureOpenAI
 from sqlalchemy.orm import Session
@@ -119,6 +125,28 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_adu_eligibility",
+            "description": (
+                "Check if a parcel is eligible for an Accessory Dwelling Unit (ADU). "
+                "Evaluates zoning, historic preservation (HPOZ), flood zone, fire hazard, "
+                "hillside regulations, and coastal zone overlays. Returns a detailed "
+                "eligibility assessment."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "apn_or_address": {
+                        "type": "string",
+                        "description": "APN number like '5149-022-018' or partial address like '1234 Sunset Blvd'",
+                    }
+                },
+                "required": ["apn_or_address"],
+            },
+        },
+    },
 ]
 
 
@@ -159,6 +187,8 @@ def _dispatch_tool(name: str, args: dict[str, Any], db: Session) -> str:
         return get_workflow(args["process_type"], args["persona"], db)
     if name == "lookup_address":
         return lookup_address(args["address"])
+    if name == "check_adu_eligibility":
+        return check_adu_eligibility(args["apn_or_address"], db)
     return f"Unknown tool: {name}"
 
 
@@ -280,7 +310,7 @@ async def generate_speech_keynotes(reply: str) -> str:
     # Fallback: strip card blocks and markdown, return first two sentences
     import re as _re
 
-    _CARD_SENTINELS = ("PARCEL:", "CASE DETAIL:", "WORKFLOW:", "MAP:")
+    _CARD_SENTINELS = ("PARCEL:", "CASE DETAIL:", "WORKFLOW:", "MAP:", "ADU ELIGIBILITY CHECK:")
     lines = reply.splitlines()
     clean: list[str] = []
     skip = False

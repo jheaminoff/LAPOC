@@ -15,6 +15,22 @@ class Plot(Base):
     lot_size_sqft = Column(Integer)
     current_use = Column(Text)
 
+    # ZIMAS-enriched fields
+    zoning_overlays = Column(Text)  # JSON array of overlay labels
+    toc_tier = Column(Text)  # "Tier 1"–"Tier 4" | None
+    general_plan_land_use = Column(Text)
+    sb9_eligible = Column(Text)  # "Yes" | "No" | "Review Eligibility"
+    sb35_eligible = Column(Text)
+    ab2097_eligible = Column(Text)  # "Yes" | "No"
+    hpoz_hcm = Column(Text)  # Historic Preservation status
+    flood_zone = Column(Text)
+    fire_hazard_severity = Column(Text)
+    hillside_area = Column(Text)  # "Yes" | "No"
+    adaptive_reuse = Column(Text)
+    council_district = Column(Text)
+    community_plan_area = Column(Text)
+    ladbs_district_office = Column(Text)
+
     cases = relationship("Case", back_populates="plot")
 
 

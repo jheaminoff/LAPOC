@@ -13,6 +13,22 @@ class PlotOut(BaseModel):
     lot_size_sqft: Optional[int] = None
     current_use: Optional[str] = None
 
+    # ZIMAS-enriched fields (returned when available)
+    zoning_overlays: Optional[str] = None
+    toc_tier: Optional[str] = None
+    general_plan_land_use: Optional[str] = None
+    sb9_eligible: Optional[str] = None
+    sb35_eligible: Optional[str] = None
+    ab2097_eligible: Optional[str] = None
+    hpoz_hcm: Optional[str] = None
+    flood_zone: Optional[str] = None
+    fire_hazard_severity: Optional[str] = None
+    hillside_area: Optional[str] = None
+    adaptive_reuse: Optional[str] = None
+    council_district: Optional[str] = None
+    community_plan_area: Optional[str] = None
+    ladbs_district_office: Optional[str] = None
+
     model_config = {"from_attributes": True}
 
 

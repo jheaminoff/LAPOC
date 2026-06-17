@@ -25,6 +25,22 @@ PLOTS = [
         zoning="R1-1-HCR",
         lot_size_sqft=6800,
         current_use="Single Family Residential",
+        zoning_overlays=json.dumps(
+            ["ZI-2452 Transit Priority Area", "ZI-2512 Housing Element Sites"]
+        ),
+        toc_tier=None,
+        general_plan_land_use="Low Residential",
+        sb9_eligible="Yes",
+        sb35_eligible="No",
+        ab2097_eligible="Yes",
+        hpoz_hcm="No",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="No",
+        hillside_area="Yes",
+        adaptive_reuse=None,
+        council_district="CD 13 — Hugo Soto-Martinez",
+        community_plan_area="Silver Lake - Echo Park - Elysian Valley",
+        ladbs_district_office="West LA",
     ),
     # Silver Lake — duplex-zoned residential
     dict(
@@ -34,6 +50,26 @@ PLOTS = [
         zoning="R2-1VL",
         lot_size_sqft=5400,
         current_use="Single Family Residential",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "ZI-2512 Housing Element Sites",
+                "ZI-2374 State Enterprise Zone: Los Angeles",
+            ]
+        ),
+        toc_tier="Tier 3",
+        general_plan_land_use="Low Medium Residential",
+        sb9_eligible="Yes",
+        sb35_eligible="Yes",
+        ab2097_eligible="Yes",
+        hpoz_hcm="No",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="No",
+        hillside_area="No",
+        adaptive_reuse=None,
+        council_district="CD 13 — Hugo Soto-Martinez",
+        community_plan_area="Silver Lake - Echo Park - Elysian Valley",
+        ladbs_district_office="West LA",
     ),
     # Hollywood — commercial strip
     dict(
@@ -43,6 +79,26 @@ PLOTS = [
         zoning="C1-1VL",
         lot_size_sqft=7200,
         current_use="Retail/Commercial",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "Hollywood Community Plan Specific Plan",
+                "CDO: Hollywood Community Design Overlay",
+            ]
+        ),
+        toc_tier="Tier 4",
+        general_plan_land_use="Community Commercial",
+        sb9_eligible="No",
+        sb35_eligible="Review Eligibility",
+        ab2097_eligible="Yes",
+        hpoz_hcm="No",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="No",
+        hillside_area="No",
+        adaptive_reuse="Citywide Adaptive Reuse Program",
+        council_district="CD 13 — Hugo Soto-Martinez",
+        community_plan_area="Hollywood",
+        ladbs_district_office="Metro",
     ),
     # Venice — beachside residential
     dict(
@@ -52,6 +108,26 @@ PLOTS = [
         zoning="R3-1-O",
         lot_size_sqft=4500,
         current_use="Single Family Residential",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "Venice Coastal Zone",
+                "Venice Specific Plan",
+            ]
+        ),
+        toc_tier="Tier 2",
+        general_plan_land_use="Low Medium Residential",
+        sb9_eligible="Yes",
+        sb35_eligible="No",
+        ab2097_eligible="Yes",
+        hpoz_hcm="Venice Canal HPOZ",
+        flood_zone="Within Flood Zone (AE)",
+        fire_hazard_severity="No",
+        hillside_area="No",
+        adaptive_reuse=None,
+        council_district="CD 11 — Traci Park",
+        community_plan_area="Venice",
+        ladbs_district_office="West LA",
     ),
     # South LA — SFR
     dict(
@@ -61,6 +137,27 @@ PLOTS = [
         zoning="R1-1",
         lot_size_sqft=6200,
         current_use="Single Family Residential",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "ZI-2512 Housing Element Sites",
+                "ZI-2374 State Enterprise Zone: Los Angeles",
+                "ZI-2520 South Los Angeles Community Plan Implementation Overlay",
+            ]
+        ),
+        toc_tier="Tier 3",
+        general_plan_land_use="Low Residential",
+        sb9_eligible="Yes",
+        sb35_eligible="Review Eligibility",
+        ab2097_eligible="Yes",
+        hpoz_hcm="No",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="No",
+        hillside_area="No",
+        adaptive_reuse=None,
+        council_district="CD 8 — Marqueece Harris-Dawson",
+        community_plan_area="South Los Angeles",
+        ladbs_district_office="South LA",
     ),
     # Leimert Park — SFR
     dict(
@@ -70,6 +167,26 @@ PLOTS = [
         zoning="R1-1",
         lot_size_sqft=7000,
         current_use="Single Family Residential",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "ZI-2512 Housing Element Sites",
+                "Leimert Park Specific Plan",
+            ]
+        ),
+        toc_tier="Tier 3",
+        general_plan_land_use="Low Residential",
+        sb9_eligible="Yes",
+        sb35_eligible="No",
+        ab2097_eligible="Yes",
+        hpoz_hcm="Leimert Park HPOZ",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="No",
+        hillside_area="No",
+        adaptive_reuse=None,
+        council_district="CD 8 — Marqueece Harris-Dawson",
+        community_plan_area="South Los Angeles",
+        ladbs_district_office="South LA",
     ),
     # Downtown LA — high-density commercial (complex zoning overlay)
     dict(
@@ -79,6 +196,27 @@ PLOTS = [
         zoning="[HB5-SH1-5][CX4-FA][CPIO]",
         lot_size_sqft=22000,
         current_use="Commercial Office",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "Downtown Community Plan Specific Plan",
+                "CPIO: Downtown Community Plan Implementation Overlay",
+                "Adaptive Reuse Program Area",
+            ]
+        ),
+        toc_tier="Tier 4",
+        general_plan_land_use="Regional Center Commercial",
+        sb9_eligible="No",
+        sb35_eligible="Yes",
+        ab2097_eligible="Yes",
+        hpoz_hcm="No",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="No",
+        hillside_area="No",
+        adaptive_reuse="Citywide Adaptive Reuse Program",
+        council_district="CD 14 — Ysabel Jurado",
+        community_plan_area="Downtown",
+        ladbs_district_office="Metro",
     ),
     # West Adams — commercial with CPIO overlay
     dict(
@@ -88,6 +226,26 @@ PLOTS = [
         zoning="C2-2D-CPIO",
         lot_size_sqft=8400,
         current_use="Retail/Commercial",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "ZI-2374 State Enterprise Zone: Los Angeles",
+                "CPIO: West Adams Community Plan Implementation Overlay",
+            ]
+        ),
+        toc_tier="Tier 3",
+        general_plan_land_use="Community Commercial",
+        sb9_eligible="No",
+        sb35_eligible="Review Eligibility",
+        ab2097_eligible="Yes",
+        hpoz_hcm="No",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="No",
+        hillside_area="No",
+        adaptive_reuse=None,
+        council_district="CD 10 — Heather Hutt",
+        community_plan_area="West Adams - Baldwin Hills - Leimert",
+        ladbs_district_office="Metro",
     ),
     # West Adams — specific plan area commercial
     dict(
@@ -97,6 +255,26 @@ PLOTS = [
         zoning="C1.5-1-SP",
         lot_size_sqft=5800,
         current_use="Commercial/Retail",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "ZI-2512 Housing Element Sites",
+                "West Adams Specific Plan",
+            ]
+        ),
+        toc_tier=None,
+        general_plan_land_use="Neighborhood Commercial",
+        sb9_eligible="No",
+        sb35_eligible="No",
+        ab2097_eligible="Yes",
+        hpoz_hcm="No",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="No",
+        hillside_area="No",
+        adaptive_reuse=None,
+        council_district="CD 8 — Marqueece Harris-Dawson",
+        community_plan_area="West Adams - Baldwin Hills - Leimert",
+        ladbs_district_office="South LA",
     ),
     # Sunset Strip — hillside residential (coastal range)
     dict(
@@ -106,6 +284,26 @@ PLOTS = [
         zoning="R1-1-HCR",
         lot_size_sqft=9200,
         current_use="Restaurant/Bar",
+        zoning_overlays=json.dumps(
+            [
+                "ZI-2452 Transit Priority Area",
+                "Sunset Strip Specific Plan",
+                "CDO: Sunset Strip Community Design Overlay",
+            ]
+        ),
+        toc_tier="Tier 2",
+        general_plan_land_use="Low Residential",
+        sb9_eligible="Yes",
+        sb35_eligible="No",
+        ab2097_eligible="Yes",
+        hpoz_hcm="No",
+        flood_zone="Outside Flood Zone",
+        fire_hazard_severity="Very High",
+        hillside_area="Yes",
+        adaptive_reuse=None,
+        council_district="CD 11 — Traci Park",
+        community_plan_area="West Los Angeles",
+        ladbs_district_office="West LA",
     ),
 ]
 

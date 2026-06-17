@@ -1,5 +1,7 @@
 """Agent tool functions — each wraps DB queries and returns plain-text summaries."""
 
+import json
+
 import httpx
 from models import Case, Plot, WorkflowPersona, WorkflowStep
 from sqlalchemy.orm import Session
@@ -12,7 +14,8 @@ from sqlalchemy.orm import Session
 def lookup_parcel(apn_or_address: str, db: Session) -> str:
     """
     Look up a parcel by APN (XXXX-XXX-XXX) or partial address.
-    Returns a plain-text summary of the plot and all its open cases.
+    Returns a plain-text summary of the plot, ZIMAS overlays, incentives, and
+    all associated cases.
     """
     plot = db.query(Plot).filter(Plot.apn == apn_or_address).first()
 
@@ -46,9 +49,69 @@ def lookup_parcel(apn_or_address: str, db: Session) -> str:
             else "  Lot size: unknown"
         ),
         f"  Current use: {plot.current_use}",
-        "",
-        f"CASES ({len(cases)} total):",
     ]
+
+    # --- Zoning overlays (parsed from JSON string) ---
+    if plot.zoning_overlays:
+        try:
+            overlays = json.loads(plot.zoning_overlays)
+            if overlays:
+                lines.append("")
+                lines.append("  ZONING OVERLAYS:")
+                for o in overlays:
+                    lines.append(f"    \u2022 {o}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # --- Development incentives ---
+    incentives = []
+    if plot.toc_tier:
+        incentives.append(f"TOC: {plot.toc_tier}")
+    if plot.sb9_eligible and plot.sb9_eligible != "No":
+        incentives.append(f"SB 9: {plot.sb9_eligible}")
+    if plot.sb35_eligible and plot.sb35_eligible != "No":
+        incentives.append(f"SB 35: {plot.sb35_eligible}")
+    if plot.ab2097_eligible and plot.ab2097_eligible != "No":
+        incentives.append("AB 2097: Within 1/2 mi of Major Transit Stop")
+    if plot.adaptive_reuse:
+        incentives.append(f"Adaptive Reuse: {plot.adaptive_reuse}")
+    if incentives:
+        lines.append("")
+        lines.append("  DEVELOPMENT INCENTIVES:")
+        for i in incentives:
+            lines.append(f"    \u2022 {i}")
+
+    # --- Hazards & constraints ---
+    hazards = []
+    if plot.flood_zone and plot.flood_zone != "Outside Flood Zone":
+        hazards.append(f"Flood Zone: {plot.flood_zone}")
+    if plot.fire_hazard_severity and plot.fire_hazard_severity != "No":
+        hazards.append(f"Fire Hazard: {plot.fire_hazard_severity}")
+    if plot.hillside_area == "Yes":
+        hazards.append("Hillside Construction Regulation (HCR) area")
+    if hazards:
+        lines.append("")
+        lines.append("  HAZARDS & CONSTRAINTS:")
+        for h in hazards:
+            lines.append(f"    \u2022 {h}")
+
+    # --- Jurisdictional info ---
+    juris_parts = []
+    if plot.council_district:
+        juris_parts.append(plot.council_district)
+    if plot.community_plan_area:
+        juris_parts.append(plot.community_plan_area)
+    if plot.ladbs_district_office:
+        juris_parts.append(f"LADBS: {plot.ladbs_district_office}")
+    if juris_parts:
+        lines.append("")
+        lines.append("  JURISDICTION:")
+        for j in juris_parts:
+            lines.append(f"    \u2022 {j}")
+
+    # --- Cases ---
+    lines.append("")
+    lines.append(f"CASES ({len(cases)} total):")
 
     if not cases:
         lines.append("  No active or historical cases found.")
@@ -310,6 +373,126 @@ def lookup_address(address: str) -> str:
     lines.append(
         "Tip: use the APN above to look up parcel details and associated cases."
     )
+
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# Tool 5: check_adu_eligibility
+# --------------------------------------------------------------------------- #
+
+_RESIDENTIAL_ZONE_PREFIXES = ("R1", "R2", "R3", "R4", "R5", "RD", "RW", "RU", "RA", "RE", "RS")
+
+
+def check_adu_eligibility(apn_or_address: str, db: Session) -> str:
+    """
+    Check if a parcel is eligible for an Accessory Dwelling Unit (ADU) by
+    evaluating zoning, overlays, hazards, and historic status.
+    Returns a structured ADU ELIGIBILITY CHECK: block.
+    """
+    plot = db.query(Plot).filter(Plot.apn == apn_or_address).first()
+
+    if not plot:
+        plots = (
+            db.query(Plot)
+            .filter(Plot.address.ilike(f"%{apn_or_address}%"))
+            .limit(5)
+            .all()
+        )
+        if not plots:
+            return f"No parcel found matching '{apn_or_address}'."
+        if len(plots) > 1:
+            lines = [f"Multiple parcels matched '{apn_or_address}':"]
+            for p in plots:
+                lines.append(f"  \u2022 APN {p.apn} \u2014 {p.address}")
+            lines.append("Please specify the APN to continue.")
+            return "\n".join(lines)
+        plot = plots[0]
+
+    lines = [
+        f"ADU ELIGIBILITY CHECK for {plot.address}",
+        f"  APN: {plot.apn}",
+        f"  Zoning: {plot.zoning}",
+        "",
+    ]
+
+    # --- 1. ZONING ---
+    zoning_ok = any(plot.zoning.startswith(p) for p in _RESIDENTIAL_ZONE_PREFIXES)
+    if zoning_ok:
+        lines.append("  ZONING: \u2705 Residential zone \u2014 ADU permitted by right")
+    else:
+        lines.append(
+            "  ZONING: \u274c Non-residential zone \u2014 ADU not permitted"
+        )
+
+    # --- 2. HPOZ ---
+    hpoz = plot.hpoz_hcm
+    if hpoz and hpoz.strip().lower() not in ("", "no", "none"):
+        lines.append(
+            f"  HPOZ: \u26a0 {hpoz} \u2014 ADU allowed, requires HPOZ ministerial review (ADUH case type)"
+        )
+
+    # --- 3. FLOOD ZONE ---
+    flood = plot.flood_zone
+    if flood and "outside" not in flood.lower():
+        lines.append(
+            f"  FLOOD ZONE: \u26a0 {flood} \u2014 ADU allowed, requires flood-proofing per FEMA standards"
+        )
+
+    # --- 4. FIRE HAZARD ---
+    fire = plot.fire_hazard_severity
+    if fire and fire.lower() == "very high":
+        lines.append(
+            "  FIRE HAZARD: \u26a0 Very High Fire Hazard Severity Zone \u2014 "
+            "ADU allowed, requires fire-hardened construction (ignition-resistant materials, ember-resistant vents)"
+        )
+
+    # --- 5. HILLSIDE (HCR) ---
+    if plot.hillside_area == "Yes":
+        lines.append(
+            "  HILLSIDE (HCR): \u26a0 Hillside Construction Regulation area \u2014 "
+            "ADU allowed, expects HCR-compliant site plan (soils report, grading plan)"
+        )
+
+    # --- 6. COASTAL ZONE ---
+    if plot.zoning_overlays:
+        try:
+            overlays = json.loads(plot.zoning_overlays)
+            coastal = [o for o in overlays if "coastal" in o.lower()]
+            if coastal:
+                lines.append(
+                    "  COASTAL ZONE: \u26a0 Coastal Zone overlay \u2014 "
+                    "ADU may require a Coastal Development Permit"
+                )
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # --- SUMMARY ---
+    lines.append("")
+    # Detect constraint lines (⚠ or ❌ appear mid-line in field entries)
+    constraints = [
+        s for s in lines if "\u26a0" in s or "\u274c" in s
+    ]
+    if not zoning_ok:
+        lines.append("  OVERALL: \u274c NOT ELIGIBLE")
+        lines.append(
+            "    \u2192 This parcel is not zoned for residential use. ADUs are "
+            "only permitted on parcels that allow residential development."
+        )
+    elif not constraints:
+        lines.append("  OVERALL: \u2705 ELIGIBLE \u2014 No constraints")
+        lines.append(
+            "    \u2192 Your parcel qualifies for a by-right ADU. "
+            "Proceed with Step 1: Prepare plans and submit to LADBS. "
+            "Use get_workflow('ADU') for the full step-by-step process."
+        )
+    else:
+        lines.append("  OVERALL: \u2705 ELIGIBLE \u2014 With conditions")
+        lines.append(
+            "    \u2192 Your parcel is eligible, but the constraints above "
+            "require additional review or design measures. "
+            "Use get_workflow('ADU') for the full step-by-step process."
+        )
 
     return "\n".join(lines)
 
