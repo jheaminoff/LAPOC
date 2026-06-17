@@ -42,4 +42,4 @@ steps:
       azureSubscription: '$(azureSubscription)'
       appName: '$(webAppName)'
       package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
-      startUpCommand: 'cd backend && python -m seed.seed_data && uvicorn main:app --host 0.0.0.0 --port ${PORT}'
+      startUpCommand: 'python -m seed.seed_data && uvicorn main:app --host 0.0.0.0 --port ${PORT}'
