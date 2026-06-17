@@ -16,7 +16,7 @@ export function useSpeechToken(): UseSpeechTokenResult {
 
   const fetchToken = useCallback(async () => {
     try {
-      const res = await fetch('/speech-token')
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/speech-token`)
       if (!res.ok) throw new Error(`Token fetch failed: ${res.status}`)
       const data: SpeechToken = await res.json()
       setToken(data.token)
