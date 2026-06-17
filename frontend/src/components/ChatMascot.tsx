@@ -100,8 +100,12 @@ function ProceduralMascot(_props: ChatMascotProps) {
 }
 
 export default function ChatMascot(props: ChatMascotProps) {
+  const handleClick = () => {
+    new Audio('/static/baah.mp3').play().catch(() => {})
+  }
+
   return (
-    <div className={styles.container}>
+    <div className={styles.container} onClick={handleClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick() }}>
       <Canvas shadows camera={{ position: [0, 1.2, 3.5], fov: 40 }}>
         <ambientLight intensity={0.6} />
         <spotLight position={[4, 4, 4]} angle={0.3} penumbra={0.8} intensity={0.8} />
